@@ -1,0 +1,110 @@
+fn __print_string(%value: string) -> void
+
+fn __print_int(%value: i64, %signed: bool) -> void
+
+fn __print_int_format(%value: i64, %signed: bool, %format: i32) -> void
+
+fn __print_bool(%value: bool) -> void
+
+fn __print_newline() -> void
+
+fn print_string(%value: string) -> void
+locals:
+  local#0 value: string
+ownership:
+  owner value
+  auto_drop value at return (bb0_bb0)
+bb0_bb0:
+  %0 = stack_alloc string
+  %1 = param_ref 0
+  store %0, %1
+  %2 = load %0
+  %3 = stack_alloc string
+  %4 = call cyna_string_share(%2)
+  store %3, %4
+  %5 = load %3
+  %6 = call cyna_std_prelude_print_string(%5)
+  %7 = load %0
+  %8 = call cyna_string_release(%7)
+  return
+
+fn print_int(%value: i64, %signed: bool) -> void
+locals:
+  local#0 value: i64
+  local#1 signed: bool
+bb0_bb0:
+  %0 = stack_alloc i64
+  %1 = param_ref 0
+  store %0, %1
+  %2 = stack_alloc bool
+  %3 = param_ref 1
+  store %2, %3
+  %4 = load %0
+  %5 = load %2
+  %6 = call cyna_std_prelude_print_int(%4, %5)
+  return
+
+fn print_int_format(%value: i64, %signed: bool, %format: i32) -> void
+locals:
+  local#0 value: i64
+  local#1 signed: bool
+  local#2 format: i32
+bb0_bb0:
+  %0 = stack_alloc i64
+  %1 = param_ref 0
+  store %0, %1
+  %2 = stack_alloc bool
+  %3 = param_ref 1
+  store %2, %3
+  %4 = stack_alloc i32
+  %5 = param_ref 2
+  store %4, %5
+  %6 = load %0
+  %7 = load %2
+  %8 = load %4
+  %9 = call cyna_std_prelude_print_int_format(%6, %7, %8)
+  return
+
+fn print_bool(%value: bool) -> void
+locals:
+  local#0 value: bool
+bb0_bb0:
+  %0 = stack_alloc bool
+  %1 = param_ref 0
+  store %0, %1
+  %2 = load %0
+  %3 = call cyna_std_prelude_print_bool(%2)
+  return
+
+fn print_newline() -> void
+bb0_bb0:
+  %0 = call cyna_std_prelude_print_newline()
+  return
+
+fn add(%a: i32, %b: i32) -> i32
+locals:
+  local#0 a: i32
+  local#1 b: i32
+  local#2 sum: i32
+bb0_bb0:
+  %0 = stack_alloc i32
+  %1 = param_ref 0
+  store %0, %1
+  %2 = stack_alloc i32
+  %3 = param_ref 1
+  store %2, %3
+  %4 = stack_alloc i32
+  %5 = load %0
+  %6 = load %2
+  %7 = int_to_int %6
+  %8 = int_binop add %5, %7
+  store %4, %8
+  %9 = load %4
+  return %9
+
+fn main() -> i32
+bb0_bb0:
+  %0 = const_int 20
+  %1 = const_int 22
+  %2 = call add(%0, %1)
+  return %2

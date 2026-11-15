@@ -1,0 +1,15 @@
+name = "freestanding-minimal"
+entry = "src/main.cy"
+
+[build]
+target = "thumbv7em-none-eabi"
+cpu = "cortex-m4"
+opt = "release"
+emit = ["elf", "bin"]
+
+[link]
+script = "board/link.ld"
+entry_symbol = "_start"
+
+[asm]
+sources = ["board/start.S"]

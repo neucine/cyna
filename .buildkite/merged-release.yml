@@ -1,0 +1,58 @@
+steps:
+  - wait: ~
+
+  - label: ":mac: Verify macOS release archive"
+    key: merged-verify-macos
+    command: |
+      set -e
+      .buildkite/scripts/runner-ready.sh macos --from-buildkite
+      .buildkite/scripts/release-verify.sh macos build
+      .buildkite/scripts/release-verify.sh macos package
+    agents:
+      queue: macos-local
+    secrets:
+      - PRIVATE_REPO_READ_TOKEN
+
+  - label: ":linux: Verify Linux release archive"
+    key: merged-verify-linux
+    command: |
+      set -e
+      .buildkite/scripts/runner-ready.sh linux --from-buildkite
+      .buildkite/scripts/release-verify.sh linux build
+      .buildkite/scripts/release-verify.sh linux package
+    agents:
+      queue: linux-local-gpu
+    secrets:
+      - PRIVATE_REPO_READ_TOKEN
+
+  - label: ":windows: Verify Windows release archive"
+    key: merged-verify-windows
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/windows-release-stages.ps1"
+    agents:
+      queue: windows-local
+    secrets:
+      - PRIVATE_REPO_READ_TOKEN
+
+  - wait: ~
+
+  - label: ":package: Check release archives"
+    key: merged-candidate-artifacts
+    command: /opt/homebrew/bin/python3.13 .buildkite/scripts/collect-candidate.py --step-prefix merged-verify
+    agents:
+      queue: macos-local
+
+  - block: ":rocket: Approve Cyna release"
+    key: release-approval
+    prompt: "Publish the three verified archives from this merged commit?"
+
+  - label: ":rocket: Publish Cyna release"
+    key: publish-release
+    command: .buildkite/scripts/publish-release.sh
+    agents:
+      queue: macos-local
+    secrets:
+      - GITHUB_RELEASE_TOKEN
+      - CLOUDFLARE_ACCOUNT_ID
+      - CLOUDFLARE_API_TOKEN
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY

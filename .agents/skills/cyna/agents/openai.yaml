@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyna"
+  short_description: "Idiomatic Cyna patterns, ownership, and code review"
+  default_prompt: "Use $cyna to write or review this code for idiomatic Cyna syntax, ownership, and library patterns."

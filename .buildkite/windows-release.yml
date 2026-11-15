@@ -1,0 +1,8 @@
+steps:
+  - label: ":windows: Verify Windows release"
+    key: windows-build
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/windows-release-stages.ps1"
+    agents:
+      queue: windows-local
+    secrets:
+      - PRIVATE_REPO_READ_TOKEN
