@@ -1,0 +1,7 @@
+.git
+.zig-cache
+zig-out
+dist
+.cyna-cache
+examples/.cyna-cache
+.DS_Store

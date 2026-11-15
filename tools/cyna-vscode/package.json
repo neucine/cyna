@@ -1,0 +1,103 @@
+{
+  "name": "cyna",
+  "displayName": "Cyna",
+  "description": "Syntax highlighting and editor support for the current Cyna language surface.",
+  "version": "0.0.11",
+  "publisher": "cyna",
+  "icon": "icons/cyna-extension-icon.png",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neucine/cyna.git",
+    "directory": "tools/cyna-vscode"
+  },
+  "main": "./extension.js",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onLanguage:cyna",
+    "workspaceContains:**/*.cy",
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cyna",
+        "aliases": [
+          "Cyna",
+          "cyna"
+        ],
+        "extensions": [
+          ".cy"
+        ],
+        "icon": {
+          "light": "./icons/cyna-file-icon-light.png",
+          "dark": "./icons/cyna-file-icon-dark.png"
+        },
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cyna",
+        "scopeName": "source.cyna",
+        "path": "./syntaxes/cyna.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Cyna",
+      "properties": {
+        "cyna.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Cyna diagnostics by running the compiler on open and save."
+        },
+        "cyna.diagnostics.validateOnChange": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run diagnostics while editing. By default diagnostics run on open and save to avoid checking stale on-disk content."
+        },
+        "cyna.compiler.command": {
+          "type": "string",
+          "default": "",
+          "description": "Compiler command for diagnostics. Leave empty to use cyna."
+        },
+        "cyna.compiler.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Compiler arguments for diagnostics. Use ${file} for the current file. Leave empty to use check ${file}."
+        },
+        "cyna.compiler.cwd": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for compiler diagnostics. Supports absolute paths, workspace-relative paths, and ${workspaceFolder}, ${file}, ${fileDirname}."
+        },
+        "cyna.lsp.command": {
+          "type": "string",
+          "default": "",
+          "description": "Command used to launch the Cyna language server. Leave empty to use cyna."
+        },
+        "cyna.lsp.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Arguments used to launch the Cyna language server. Leave empty to use lsp."
+        },
+        "cyna.lsp.cwd": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for the Cyna language server. Supports absolute paths, workspace-relative paths, and ${workspaceFolder}."
+        }
+      }
+    }
+  }
+}

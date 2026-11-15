@@ -1,0 +1,96 @@
+const std = @import("std");
+
+const test_exec = @import("../support.zig");
+
+const Example = struct {
+    path: []const u8,
+    exit_code: i64,
+};
+
+test "examples run with expected exit codes" {
+    const examples = [_]Example{
+        .{ .path = "examples/add.cy", .exit_code = 42 },
+        .{ .path = "examples/as_cast.cy", .exit_code = 42 },
+        .{ .path = "examples/enum_as_cast.cy", .exit_code = 42 },
+        .{ .path = "examples/optional_as_cast.cy", .exit_code = 42 },
+        .{ .path = "examples/union_as_cast.cy", .exit_code = 42 },
+        .{ .path = "examples/bit_width_ints.cy", .exit_code = 42 },
+        .{ .path = "examples/bool_check.cy", .exit_code = 42 },
+        .{ .path = "examples/bool_logic.cy", .exit_code = 42 },
+        .{ .path = "examples/check_status.cy", .exit_code = 42 },
+        .{ .path = "examples/container_construction.cy", .exit_code = 42 },
+        .{ .path = "examples/container_methods.cy", .exit_code = 42 },
+        .{ .path = "examples/concurrency_atomic.cy", .exit_code = 42 },
+        .{ .path = "examples/cenum_switch.cy", .exit_code = 42 },
+        .{ .path = "examples/c_header_consumer/api.cy", .exit_code = 42 },
+        .{ .path = "examples/c_header_surface.cy", .exit_code = 42 },
+        .{ .path = "examples/cstruct_point.cy", .exit_code = 42 },
+        .{ .path = "examples/defer_cleanup.cy", .exit_code = 42 },
+        .{ .path = "examples/drop_local.cy", .exit_code = 42 },
+        .{ .path = "examples/drop_struct.cy", .exit_code = 42 },
+        .{ .path = "examples/enum_status.cy", .exit_code = 42 },
+        .{ .path = "examples/enum_switch.cy", .exit_code = 42 },
+        .{ .path = "examples/enum_switch_else.cy", .exit_code = 42 },
+        .{ .path = "examples/flags_ops.cy", .exit_code = 42 },
+        .{ .path = "examples/flags_value.cy", .exit_code = 42 },
+        .{ .path = "examples/fixed_array.cy", .exit_code = 42 },
+        .{ .path = "examples/for_iteration.cy", .exit_code = 42 },
+        .{ .path = "examples/index_mutation.cy", .exit_code = 42 },
+        .{ .path = "examples/index_read.cy", .exit_code = 42 },
+        .{ .path = "examples/is_narrowing.cy", .exit_code = 42 },
+        .{ .path = "examples/list_copy.cy", .exit_code = 42 },
+        .{ .path = "examples/list_methods.cy", .exit_code = 42 },
+        .{ .path = "examples/list_owned.cy", .exit_code = 42 },
+        .{ .path = "examples/map_iteration.cy", .exit_code = 42 },
+        .{ .path = "examples/map_owned.cy", .exit_code = 42 },
+        .{ .path = "examples/mem_search.cy", .exit_code = 42 },
+        .{ .path = "examples/mem_ops.cy", .exit_code = 42 },
+        .{ .path = "examples/milestone_app.cy", .exit_code = 42 },
+        .{ .path = "examples/planner_app/main.cy", .exit_code = 42 },
+        .{ .path = "examples/generic_pipeline/main.cy", .exit_code = 42 },
+        .{ .path = "examples/workflow_app/main.cy", .exit_code = 42 },
+        .{ .path = "examples/handoff_container.cy", .exit_code = 42 },
+        .{ .path = "examples/indirect_owned_callback.cy", .exit_code = 42 },
+        .{ .path = "examples/indirect_borrowed_list.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_field_defaults.cy", .exit_code = 42 },
+        .{ .path = "examples/optional_none.cy", .exit_code = 42 },
+        .{ .path = "examples/owned_temporary_projection.cy", .exit_code = 42 },
+        .{ .path = "examples/union_none_case.cy", .exit_code = 42 },
+        .{ .path = "examples/packed_header.cy", .exit_code = 42 },
+        .{ .path = "examples/raw_pointer_unchecked.cy", .exit_code = 42 },
+        .{ .path = "examples/reference_alias.cy", .exit_code = 42 },
+        .{ .path = "examples/result_value.cy", .exit_code = 42 },
+        .{ .path = "examples/root_allocator.cy", .exit_code = 0 },
+        .{ .path = "examples/runtime_array.cy", .exit_code = 42 },
+        .{ .path = "examples/set_owned.cy", .exit_code = 42 },
+        .{ .path = "examples/slice_view.cy", .exit_code = 42 },
+        .{ .path = "examples/return_42.cy", .exit_code = 42 },
+        .{ .path = "examples/return_zero.cy", .exit_code = 0 },
+        .{ .path = "examples/string_eq.cy", .exit_code = 42 },
+        .{ .path = "examples/string_is_empty.cy", .exit_code = 42 },
+        .{ .path = "examples/string_bytes_find.cy", .exit_code = 42 },
+        .{ .path = "examples/string_len.cy", .exit_code = 42 },
+        .{ .path = "examples/string_queries.cy", .exit_code = 42 },
+        .{ .path = "examples/string_share.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_infer_literal.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_method.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_namespace.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_point.cy", .exit_code = 42 },
+        .{ .path = "examples/struct_handoff.cy", .exit_code = 42 },
+        .{ .path = "examples/sum_loop.cy", .exit_code = 42 },
+        .{ .path = "examples/top_level_global.cy", .exit_code = 42 },
+        .{ .path = "examples/top_level_float_constant.cy", .exit_code = 42 },
+        .{ .path = "examples/type_alias.cy", .exit_code = 42 },
+        .{ .path = "examples/union_decls.cy", .exit_code = 42 },
+        .{ .path = "examples/union_projection.cy", .exit_code = 42 },
+        .{ .path = "examples/union_switch.cy", .exit_code = 42 },
+        .{ .path = "examples/void_call.cy", .exit_code = 42 },
+    };
+
+    for (examples) |example| {
+        var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer scratch.deinit();
+        const actual = try test_exec.runNativeFileExitCode(scratch.allocator(), example.path);
+        try std.testing.expectEqual(example.exit_code, actual);
+    }
+}

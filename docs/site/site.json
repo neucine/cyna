@@ -1,0 +1,93 @@
+{
+  "name": "cyna",
+  "title": "cyna",
+  "description": "A C-compatible systems programming language focused on explicit memory, predictable cleanup, and strong value semantics.",
+  "version": "0.5.3",
+  "repo": "https://github.com/neucine/cyna",
+  "docs": "docs",
+  "nav": [
+    {
+      "text": "Spec",
+      "link": "/spec.html"
+    },
+    {
+      "text": "Build",
+      "link": "/build.html"
+    },
+    {
+      "text": "Runtime",
+      "link": "/runtime.html"
+    },
+    {
+      "text": "Semantics",
+      "link": "/semantics.html"
+    },
+    {
+      "text": "Terminology",
+      "link": "/glossary.html"
+    },
+    {
+      "text": "Concurrency",
+      "link": "/concurrency.html"
+    },
+    {
+      "text": "{version} notes",
+      "link": "/release-{version}.html"
+    },
+    {
+      "text": "Toolchain",
+      "link": "/toolchain.html"
+    },
+    {
+      "text": "v{version}",
+      "link": "https://github.com/neucine/cyna/releases/tag/v{version}"
+    },
+    {
+      "text": "GitHub",
+      "link": "https://github.com/neucine/cyna"
+    }
+  ],
+  "sidebar": [
+    {
+      "text": "Docs",
+      "items": [
+        {
+          "text": "Spec",
+          "link": "/spec.html"
+        },
+        {
+          "text": "Build",
+          "link": "/build.html"
+        },
+        {
+          "text": "Runtime",
+          "link": "/runtime.html"
+        },
+        {
+          "text": "Semantics",
+          "link": "/semantics.html"
+        },
+        {
+          "text": "Terminology",
+          "link": "/glossary.html"
+        },
+        {
+          "text": "Concurrency",
+          "link": "/concurrency.html"
+        },
+        {
+          "text": "{version} release notes",
+          "link": "/release-{version}.html"
+        },
+        {
+          "text": "Toolchain",
+          "link": "/toolchain.html"
+        }
+      ]
+    }
+  ],
+  "footer": {
+    "message": "Built for explicit systems programming.",
+    "copyright": "Copyright 2026 Cyna contributors"
+  }
+}

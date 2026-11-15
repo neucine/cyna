@@ -1,0 +1,43 @@
+name = "embedded"
+version = "0.1.0"
+src = "src"
+
+[[module]]
+name = "embedded.arch"
+path = "arch/mod.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.soc.sifive.fe310"
+path = "soc/sifive/fe310/device.cy"
+targets = ["riscv32-none-elf"]
+
+[[module]]
+name = "embedded.arch.barrier"
+path = "arch/barrier.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.arch.cpu"
+path = "arch/cpu.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.hal"
+path = "hal/mod.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.hal.mmio"
+path = "hal/mmio.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.hal.gpio"
+path = "hal/gpio.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]
+
+[[module]]
+name = "embedded.hal.uart"
+path = "hal/uart.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi"]

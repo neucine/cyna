@@ -1,0 +1,10 @@
+.zig-cache/
+.tools/
+__pycache__/
+zig-out/
+.DS_Store
+.vscode/
+docs/branding/.venv-branding/
+dist/
+.cyna-cache/
+.deps/

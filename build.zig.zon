@@ -1,0 +1,25 @@
+.{
+    .name = .cyna,
+    .version = "0.1.13",
+    .fingerprint = 0x923cc3c9cdfeeab0,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .zig_libs = .{
+            .path = "../zig-libs",
+        },
+    },
+    .paths = .{
+        ".zig-version",
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "test",
+        "packages",
+        "scripts",
+        "docs",
+        "examples",
+        "tools",
+        "LICENSE",
+        "README.md",
+    },
+}

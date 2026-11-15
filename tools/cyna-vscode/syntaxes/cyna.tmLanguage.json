@@ -1,0 +1,287 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Cyna",
+  "scopeName": "source.cyna",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#abiSpecifiers" },
+    { "include": "#declarations" },
+    { "include": "#typePositions" },
+    { "include": "#keywords" },
+    { "include": "#storage" },
+    { "include": "#builtins" },
+    { "include": "#types" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cyna",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.cyna",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.cyna",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.import.namespace.cyna",
+          "match": "\\b(import)\\s+(\\.?[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\\s+(as)\\s+([A-Za-z_][A-Za-z0-9_]*))?",
+          "captures": {
+            "1": { "name": "keyword.control.import.cyna" },
+            "2": { "name": "entity.name.namespace.cyna" },
+            "3": { "name": "keyword.control.import.cyna" },
+            "4": { "name": "variable.other.alias.cyna" }
+          }
+        },
+        {
+          "name": "meta.import.selected.cyna",
+          "match": "\\b(import)\\s*(\\{[^}]*\\})\\s*(from)\\s+(\\.?[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)",
+          "captures": {
+            "1": { "name": "keyword.control.import.cyna" },
+            "2": { "name": "meta.brace.import-list.cyna" },
+            "3": { "name": "keyword.control.import.cyna" },
+            "4": { "name": "entity.name.namespace.cyna" }
+          }
+        },
+        {
+          "name": "meta.function.cyna",
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.cyna" },
+            "2": { "name": "entity.name.function.cyna" }
+          }
+        },
+        {
+          "name": "meta.type-alias.cyna",
+          "match": "\\b(type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.cyna" },
+            "2": { "name": "entity.name.type.alias.cyna" }
+          }
+        },
+        {
+          "name": "meta.struct.cyna",
+          "match": "\\b((?:c\\s+)?(?:struct|enum|union)|flags|protocol)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.type.cyna" },
+            "2": { "name": "entity.name.type.definition.cyna" }
+          }
+        },
+        {
+          "name": "meta.impl.cyna",
+          "match": "\\b(impl)\\s+([A-Za-z_][A-Za-z0-9_]*)(\\s*:\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.type.cyna" },
+            "2": { "name": "entity.name.type.definition.cyna" },
+            "3": { "name": "punctuation.separator.type.cyna" },
+            "4": { "name": "support.type.cyna" }
+          }
+        },
+        {
+          "name": "meta.method-call.cyna",
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "punctuation.accessor.cyna" },
+            "2": { "name": "entity.name.function.member.cyna" }
+          }
+        }
+      ]
+    },
+    "abiSpecifiers": {
+      "patterns": [
+        {
+          "name": "meta.abi-specifier.cyna",
+          "match": "\\b(c|asm)(\\s*)(\\()(\\s*)(\"[^\"]*\")(\\s*)(\\))",
+          "captures": {
+            "1": { "name": "storage.modifier.abi.cyna" },
+            "3": { "name": "punctuation.definition.group.begin.cyna" },
+            "5": { "name": "string.quoted.double.cyna" },
+            "7": { "name": "punctuation.definition.group.end.cyna" }
+          }
+        },
+        {
+          "name": "storage.modifier.abi.cyna",
+          "match": "\\b(c|asm)\\b(?=\\s+(?:fn|const|var))"
+        }
+      ]
+    },
+    "typePositions": {
+      "patterns": [
+        {
+          "name": "meta.type.function-pointer.cyna",
+          "match": "(:)\\s*(\\??\\s*(?:[&*^]\\s*)?(?:(?:\\[:\\]|\\[[0-9]*\\])\\s*)*)((?:c\\s+)?fn)\\s*(\\()",
+          "captures": {
+            "1": { "name": "punctuation.separator.type.cyna" },
+            "2": { "name": "storage.type.pointer.cyna" },
+            "3": { "name": "storage.type.function.cyna" },
+            "4": { "name": "punctuation.definition.group.cyna" }
+          }
+        },
+        {
+          "name": "meta.type.annotation.cyna",
+          "match": "(:)\\s*(\\??\\s*(?:[&*^]\\s*)?(?:(?:\\[:\\]|\\[[0-9]*\\])\\s*)*)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "punctuation.separator.type.cyna" },
+            "2": { "name": "storage.type.pointer.cyna" },
+            "3": { "name": "support.type.cyna" }
+          }
+        },
+        {
+          "name": "meta.type.instantiation.cyna",
+          "match": "\\b(new)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.other.new.cyna" },
+            "2": { "name": "support.type.cyna" }
+          }
+        },
+        {
+          "name": "meta.type.generic.cyna",
+          "match": "\\b(List|Map|Set|list|map|set)\\s*(<)",
+          "captures": {
+            "1": { "name": "support.type.container.cyna" },
+            "2": { "name": "punctuation.definition.typeparameters.begin.cyna" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.cyna",
+          "match": "\\b(return|if|else|while|for|continue|in|switch|throw|catch|yield|try|check|defer|drop|unchecked|comptime|asm)\\b"
+        },
+        {
+          "name": "keyword.operator.word.cyna",
+          "match": "\\b(and|or|not|is|as)\\b"
+        },
+        {
+          "name": "keyword.other.allocator.cyna",
+          "match": "\\b(using|alloc|scoped)\\b"
+        },
+        {
+          "name": "keyword.other.cyna",
+          "match": "\\b(pub|packed|distinct|new|copy|extern|export|interface|impl|from|comptime)\\b"
+        }
+      ]
+    },
+    "storage": {
+      "patterns": [
+        {
+          "name": "storage.modifier.cyna",
+          "match": "\\b(pub|packed|extern|export)\\b"
+        },
+        {
+          "name": "storage.type.variable.cyna",
+          "match": "\\b(const|var)\\b"
+        },
+        {
+          "name": "storage.type.cyna",
+          "match": "\\b(fn|type|c|struct|enum|flags|union|protocol|impl)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "constant.language.cyna",
+          "match": "\\b(true|false|none)\\b"
+        },
+        {
+          "name": "support.type.container.cyna",
+          "match": "\\b(List|Map|Set|list|map|set)\\b"
+        },
+        {
+          "name": "support.type.primitive.cyna",
+          "match": "\\b(bool|string|void|c_void|c_str|usize|isize|f32|f64|c_float|c_double|c_char|c_schar|c_uchar|c_short|c_ushort|c_int|c_uint|c_long|c_ulong|c_llong|c_ullong|c_ptrdiff_t|c_size_t|u(?:8|16|32|64)|i(?:8|16|32|64)|[ui][1-9][0-9]*)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.pointer.cyna",
+          "match": "(\\?|)(\\^|\\*|&)"
+        },
+        {
+          "name": "support.type.cyna",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.cyna",
+          "match": "\\b(?:[0-9]+\\.[0-9]+|[0-9]+\\.|\\.[0-9]+)\\b"
+        },
+        {
+          "name": "constant.numeric.integer.cyna",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.cyna",
+          "match": "==|!=|<=|>="
+        },
+        {
+          "name": "keyword.operator.assignment.cyna",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.cyna",
+          "match": "[+\\-*/]"
+        },
+        {
+          "name": "keyword.operator.logical.cyna",
+          "match": "[!?]"
+        },
+        {
+          "name": "keyword.operator.comparison.cyna",
+          "match": "[<>]"
+        },
+        {
+          "name": "keyword.operator.bitwise.cyna",
+          "match": "[&|^~]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.cyna",
+          "match": "[,;:]"
+        },
+        {
+          "name": "punctuation.accessor.cyna",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.definition.group.cyna",
+          "match": "[(){}\\[\\]]"
+        }
+      ]
+    }
+  }
+}

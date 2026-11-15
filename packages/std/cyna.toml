@@ -1,0 +1,93 @@
+name = "std"
+version = "0.1.2"
+src = "src"
+
+[[module]]
+name = "std.prelude"
+path = "std_prelude.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_prelude.c"]
+autoload = true
+
+[[module]]
+name = "std.alloc"
+path = "std_alloc.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_alloc.c"]
+
+[[module]]
+name = "std.testing"
+path = "std_testing.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu"]
+
+[[module]]
+name = "std.mem"
+path = "std_mem.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+
+[[module]]
+name = "std.io"
+path = "std_io.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+
+[[module]]
+name = "std.json"
+path = "std_json.cy"
+targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+
+[[module]]
+name = "std.fs"
+path = "std_fs.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_fs.c"]
+
+[[module]]
+name = "std.path"
+path = "std_path.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_path.c"]
+
+[[module]]
+name = "std.time"
+path = "std_time.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+c = ["std_time.c"]
+
+[[module]]
+name = "std.math"
+path = "std_math.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+c = ["std_math.c"]
+
+[[module]]
+name = "std.process"
+path = "std_process.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_process.c"]
+
+[[module]]
+name = "std.config"
+path = "std_config.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+
+[[module]]
+name = "std.telemetry"
+path = "std_telemetry.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+
+[[module]]
+name = "std.thread"
+path = "std_thread.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+c = ["std_thread.c"]
+
+[[module]]
+name = "std.sync"
+path = "std_sync.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+c = ["std_sync.c"]
+
+[[module]]
+name = "std.own"
+path = "std_own.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
