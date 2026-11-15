@@ -38,7 +38,7 @@ The script downloads the Windows ZIP, checks its layout, installs it under
 `~/.cyna/0.5.3/`, and adds `~/.cyna/bin` to your user `PATH`. Open a new
 PowerShell window to use `cyna` later. Set `CYNA_RELEASE_VERSION` to install
 a specific release or `CYNA_INSTALL_ROOT` for another location. You can also
-download the [ZIP directly](https://github.com/neucine/cyna/releases/tag/v0.5.3).
+download the [Windows ZIP directly](https://downloads.cyna.dev/distributions/0.5.3/x86_64-pc-windows-gnu.zip).
 
 ## What is installed
 
