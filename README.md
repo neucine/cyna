@@ -73,6 +73,16 @@ an input fails. The wrapper formats maintained `.cy` sources and excludes
 generated device bindings. See [`docs/BUILD.md`](docs/BUILD.md#source-formatting)
 for scope and supported normalizations.
 
+## Built with Cyna
+
+Cyna is used in different kinds of projects:
+
+| Project | Application |
+| --- | --- |
+| [Cava](https://github.com/neucine/cava) | Java bytecode interpreter and virtual machine |
+| Lightcept | macOS desktop app for editing RAW photos |
+| [Cory](https://github.com/neucine/cory) | Kernel for AArch64 and RISC-V |
+
 ## Why Cyna
 
 Cyna aims to feel familiar to C programmers while making a different set of
