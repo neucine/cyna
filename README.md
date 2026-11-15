@@ -80,8 +80,10 @@ Cyna is used in different kinds of projects:
 | Project | Application |
 | --- | --- |
 | [Cava](https://github.com/neucine/cava) | Java bytecode interpreter and virtual machine |
-| Lightcept | macOS desktop app for editing RAW photos |
+| [Lightcept](https://github.com/neucine/lightcept) | macOS desktop app for editing RAW photos |
 | [Cory](https://github.com/neucine/cory) | Kernel for AArch64 and RISC-V |
+| [Weiv](https://github.com/neucine/weiv) | Frontend framework with a compiler written in Cyna |
+| [Hao](https://github.com/neucine/hao) | JavaScript and TypeScript runtime for native applications |
 
 ## Why Cyna
 

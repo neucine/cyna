@@ -125,8 +125,6 @@ the general-purpose growable collection API.
 
 - [Spec](SPEC.md): normative source-language behavior and syntax.
 - [Semantics](SEMANTICS.md): place, access, provenance, and checker rules.
-- [Status](STATUS.md): what the current compiler and library implement.
-- [Language gaps](LANGUAGE_GAPS.md): requests, intentional boundaries, and
-  investigation notes; a proposal there is not an implemented feature.
+- [Status](STATUS.md): implemented features and known limitations.
 - [Guide](GUIDE.md) and [cheatsheet](CHEATSHEET.md): recommended style and
   quick syntax, respectively.

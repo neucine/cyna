@@ -87,5 +87,5 @@ correctness and verification-cost repairs.
   on the former parser conflation should declare the intended layer explicitly.
 
 See [0.4.1 release notes](RELEASE_0_4_1.md) for the previous release and
-[LANGUAGE_GAPS.md](LANGUAGE_GAPS.md) for remaining investigation and
-standard-library boundaries.
+[current status](STATUS.md) for known limitations and standard-library
+boundaries.

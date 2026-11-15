@@ -34,5 +34,4 @@ fixes can be exercised before the 0.5.1 stable release.
 - GitHub releases created for prerelease versions are marked as prereleases.
 
 See [0.5.0 release notes](RELEASE_0_5_0.md) for the previous stable release and
-[LANGUAGE_GAPS.md](LANGUAGE_GAPS.md) for remaining investigations and
-boundaries.
+[current status](STATUS.md) for known limitations.
