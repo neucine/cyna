@@ -42,9 +42,9 @@ def release_version() -> str:
     return run("buildkite-agent", "meta-data", "get", "release_version", capture=True)
 
 
-def check_master(version: str, commit: str) -> None:
-    if os.environ.get("BUILDKITE_BRANCH") != "master":
-        raise SystemExit("publication is restricted to a master build")
+def check_main(version: str, commit: str) -> None:
+    if os.environ.get("BUILDKITE_BRANCH") != "main":
+        raise SystemExit("publication is restricted to a main build")
     if run("git", "rev-parse", "HEAD", capture=True) != commit:
         raise SystemExit("checkout differs from the verified release commit")
     run(sys.executable, ".buildkite/scripts/promote-check.py")
@@ -64,7 +64,7 @@ def load_manifest() -> tuple[str, str, list[dict], Path]:
         raise SystemExit("verified manifest differs from the Buildkite release build")
     if len(platforms) != 3 or {entry["host"] for entry in platforms} != set(HOSTS):
         raise SystemExit("verified manifest must contain exactly Mac, Linux, and Windows")
-    check_master(version, commit)
+    check_main(version, commit)
     return version, commit, platforms, path
 
 

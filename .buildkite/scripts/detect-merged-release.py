@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add release checks to the ordinary master build for a merged release PR."""
+"""Add release checks to the ordinary main build for a merged release PR."""
 
 import json
 import os
@@ -15,14 +15,14 @@ def command(*args: str) -> str:
 
 
 def main() -> None:
-    if os.environ.get("BUILDKITE_BRANCH") != "master":
-        raise SystemExit("release detection requires master")
+    if os.environ.get("BUILDKITE_BRANCH") != "main":
+        raise SystemExit("release detection requires main")
     commit = os.environ["BUILDKITE_COMMIT"]
     if command("git", "rev-parse", "HEAD") != commit:
         raise SystemExit("checkout differs from Buildkite commit")
     pulls = json.loads(command("gh", "api", f"repos/neucine/cyna/commits/{commit}/pulls"))
     matches = [pr for pr in pulls if pr.get("merged_at") and pr.get("merge_commit_sha") == commit
-               and pr["base"]["ref"] == "master"
+               and pr["base"]["ref"] == "main"
                and re.fullmatch(r"release/v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?", pr["head"]["ref"])]
     if not matches:
         print("No merged release PR at this commit; ordinary checks only.")

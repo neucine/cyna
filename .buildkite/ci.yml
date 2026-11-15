@@ -19,7 +19,7 @@ steps:
 
   - label: ":bookmark: Detect merged release"
     key: detect-merged-release
-    if: 'build.tag == null && build.branch == "master"'
+    if: 'build.tag == null && build.branch == "main"'
     command: /opt/homebrew/bin/python3.13 .buildkite/scripts/detect-merged-release.py
     agents:
       queue: macos-local
