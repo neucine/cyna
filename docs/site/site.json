@@ -39,6 +39,10 @@
       "link": "/toolchain.html"
     },
     {
+      "text": "v{version}",
+      "link": "https://github.com/neucine/cyna/releases/tag/v{version}"
+    },
+    {
       "text": "GitHub",
       "link": "https://github.com/neucine/cyna"
     }
