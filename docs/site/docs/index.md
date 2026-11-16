@@ -1,5 +1,6 @@
 ---
 layout: home
+title: Cyna systems programming language
 
 hero:
   text: Cyna 0.5.3
