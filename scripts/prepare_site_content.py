@@ -23,7 +23,6 @@ DOC_PAGES = {
     "SEMANTICS": "semantics",
     "RUNTIME": "runtime",
     "PHILOSOPHY": "philosophy",
-    "LANGUAGE_GAPS": "language_gaps",
     "STATUS": "status",
     "BUILD": "build",
     "TOOLCHAIN": "toolchain",
@@ -31,6 +30,7 @@ DOC_PAGES = {
 }
 
 SEMVER_PATTERN = r"\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"
+SITE_OWNED_PAGES = {"index.md", "language_gaps.md"}
 
 
 def rewrite_links(text: str) -> str:
@@ -40,7 +40,7 @@ def rewrite_links(text: str) -> str:
 
 
 def expected_pages(version: str) -> set[str]:
-    return {f"{slug}.md" for slug in DOC_PAGES.values()} | {"index.md", f"release-{version}.md"}
+    return {f"{slug}.md" for slug in DOC_PAGES.values()} | SITE_OWNED_PAGES | {f"release-{version}.md"}
 
 
 def prepare(source: Path, version: str, site: Path | None = None) -> None:

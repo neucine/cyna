@@ -9,7 +9,7 @@ the `neucine/sites` workspace syncs and publishes.
 `docs/` pages:
 
 - `docs/spec.md`, `cheatsheet.md`, `guide.md`, `concurrency.md`,
-  `semantics.md`, `runtime.md`, `philosophy.md`, `language_gaps.md`,
+  `semantics.md`, `runtime.md`, `philosophy.md`,
   `status.md`, `build.md`, `toolchain.md`, `glossary.md`
 - `docs/release-<version>.md` for the current release
 - the homepage version label in `docs/index.md`
@@ -25,6 +25,8 @@ python3 scripts/prepare_site_content.py --version <version>
 ## Site-owned files
 
 - `docs/index.md` (apart from its generated version label)
+- `docs/language_gaps.md`, a short pointer for older release notes; current limitations live in
+  `docs/STATUS.md`
 - the manifest `site.json`
 - older `docs/release-*.md` archives
 
