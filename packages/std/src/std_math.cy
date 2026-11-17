@@ -3,7 +3,7 @@ extern c("cyna_std_math_log2_f64") fn native_log2_f64(value: c_double): c_double
 extern c("cyna_std_math_log_f64") fn native_log_f64(value: c_double): c_double;
 extern c("cyna_std_math_exp_f64") fn native_exp_f64(value: c_double): c_double;
 extern c("cyna_std_math_sqrt_f64") fn native_sqrt_f64(value: c_double): c_double;
-extern c("cyna_std_math_pow_f64") fn native_pow_f64(base: c_double, exponent: c_double): c_double;
+extern c("cyna_std_math_pow_f64_bits") fn native_pow_f64_bits(base: c_double, exponent: c_double): u64;
 extern c("cyna_std_math_round_f64") fn native_round_f64(value: c_double): c_double;
 extern c("cyna_std_math_log2_f32") fn native_log2_f32(value: c_float): c_float;
 extern c("cyna_std_math_exp2_f32") fn native_exp2_f32(value: c_float): c_float;
@@ -26,7 +26,7 @@ pub fn sqrt_f64(value: f64): f64 {
     return native_sqrt_f64(value as c_double) as f64;
 }
 pub fn pow_f64(base: f64, exponent: f64): f64 {
-    return native_pow_f64(base as c_double, exponent as c_double) as f64;
+    return native_pow_f64_bits(base as c_double, exponent as c_double) as! f64;
 }
 pub fn round_f64(value: f64): f64 {
     return native_round_f64(value as c_double) as f64;

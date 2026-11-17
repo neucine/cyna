@@ -70,10 +70,10 @@ const Parser = struct {
         link_export: bool = false,
         asm_export: bool = false,
         isolated: bool = false,
-        sync_resource: bool = false,
+        concurrency_shareable: bool = false,
         shared_value: bool = false,
         owned_value: bool = false,
-        unchecked_thread_safe: bool = false,
+        concurrency_trusted_extern: bool = false,
         intrinsic_name: ?[]const u8 = null,
         intrinsic_token: ?lexer.Token = null,
         sequence_literal: bool = false,
@@ -83,7 +83,7 @@ const Parser = struct {
         first_token: ?lexer.Token = null,
 
         fn hasAny(self: DeclAttrs) bool {
-            return self.abi_c or self.link_import or self.link_export or self.asm_export or self.isolated or self.sync_resource or self.shared_value or self.owned_value or self.unchecked_thread_safe or self.intrinsic_name != null or self.sequence_literal or self.slice_view or self.syntax_role != null;
+            return self.abi_c or self.link_import or self.link_export or self.asm_export or self.isolated or self.concurrency_shareable or self.shared_value or self.owned_value or self.concurrency_trusted_extern or self.intrinsic_name != null or self.sequence_literal or self.slice_view or self.syntax_role != null;
         }
     };
 
@@ -295,8 +295,8 @@ const Parser = struct {
         }
         if (self.match(.keyword_struct)) return self.parseStructWithAttrs(.normal, is_pub, attrs);
         if (self.match(.keyword_packed)) {
-            if (attrs.sync_resource and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.unchecked_thread_safe)) {
-                try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `sync_resource` is not supported on packed structs", .{});
+            if (attrs.concurrency_shareable and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_trusted_extern)) {
+                try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.shareable` is not supported on packed structs", .{});
                 return ParseError.ParseFailed;
             }
             try self.rejectAttrs(attrs, "structs");
@@ -483,29 +483,29 @@ const Parser = struct {
                 continue;
             }
 
-            if (std.mem.eql(u8, name, "isolated")) {
+            if (std.mem.eql(u8, name, "concurrency.isolated")) {
                 if (attrs.isolated) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `isolated`", .{});
+                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `concurrency.isolated`", .{});
                     return ParseError.ParseFailed;
                 }
                 if (arg_count != 0) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `isolated` expects no arguments", .{});
+                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `concurrency.isolated` expects no arguments", .{});
                     return ParseError.ParseFailed;
                 }
                 attrs.isolated = true;
                 continue;
             }
 
-            if (std.mem.eql(u8, name, "sync_resource")) {
-                if (attrs.sync_resource) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `sync_resource`", .{});
+            if (std.mem.eql(u8, name, "concurrency.shareable")) {
+                if (attrs.concurrency_shareable) {
+                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `concurrency.shareable`", .{});
                     return ParseError.ParseFailed;
                 }
                 if (arg_count != 0) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `sync_resource` expects no arguments", .{});
+                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `concurrency.shareable` expects no arguments", .{});
                     return ParseError.ParseFailed;
                 }
-                attrs.sync_resource = true;
+                attrs.concurrency_shareable = true;
                 continue;
             }
 
@@ -535,16 +535,16 @@ const Parser = struct {
                 continue;
             }
 
-            if (std.mem.eql(u8, name, "unchecked_thread_safe")) {
-                if (attrs.unchecked_thread_safe) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `unchecked_thread_safe`", .{});
+            if (std.mem.eql(u8, name, "concurrency.trusted_extern")) {
+                if (attrs.concurrency_trusted_extern) {
+                    try self.diagnostic_context.emitToken(self.path, at_token, "duplicate attribute `concurrency.trusted_extern`", .{});
                     return ParseError.ParseFailed;
                 }
                 if (arg_count != 0) {
-                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `unchecked_thread_safe` expects no arguments", .{});
+                    try self.diagnostic_context.emitToken(self.path, at_token, "attribute `concurrency.trusted_extern` expects no arguments", .{});
                     return ParseError.ParseFailed;
                 }
-                attrs.unchecked_thread_safe = true;
+                attrs.concurrency_trusted_extern = true;
                 continue;
             }
 
@@ -648,14 +648,14 @@ const Parser = struct {
             return ParseError.ParseFailed;
         }
         if (attrs.isolated and !attrs.abi_c and !attrs.link_import and !attrs.link_export and !attrs.asm_export) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `isolated` is only supported on functions", .{});
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.isolated` is only supported on functions", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.sync_resource and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.unchecked_thread_safe)) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `sync_resource` is only supported on structs", .{});
+        if (attrs.concurrency_shareable and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_trusted_extern)) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.shareable` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.shared_value and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.sync_resource or attrs.unchecked_thread_safe)) {
+        if (attrs.shared_value and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_shareable or attrs.concurrency_trusted_extern)) {
             try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `shared_value` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
@@ -663,8 +663,8 @@ const Parser = struct {
             try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `ownership.owned` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.unchecked_thread_safe and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.sync_resource or attrs.shared_value)) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `unchecked_thread_safe` is only supported on extern functions", .{});
+        if (attrs.concurrency_trusted_extern and !(attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_shareable or attrs.shared_value)) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.trusted_extern` is only supported on extern functions", .{});
             return ParseError.ParseFailed;
         }
         try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attributes are not supported on {s}", .{target});
@@ -1037,11 +1037,11 @@ const Parser = struct {
             return;
         }
         if (attrs.isolated) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `isolated` is only supported on functions", .{});
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.isolated` is only supported on functions", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.sync_resource) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `sync_resource` is only supported on structs", .{});
+        if (attrs.concurrency_shareable) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.shareable` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.shared_value) {
@@ -1052,8 +1052,8 @@ const Parser = struct {
             try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `ownership.owned` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.unchecked_thread_safe) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `unchecked_thread_safe` is only supported on extern functions", .{});
+        if (attrs.concurrency_trusted_extern) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.trusted_extern` is only supported on extern functions", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.link_export) {
@@ -1090,19 +1090,19 @@ const Parser = struct {
             try self.parseStruct(layout, is_pub, .{});
             return;
         }
-        if ((attrs.sync_resource and (attrs.shared_value or attrs.owned_value)) or
+        if ((attrs.concurrency_shareable and (attrs.shared_value or attrs.owned_value)) or
             (attrs.shared_value and attrs.owned_value) or
-            (!attrs.sync_resource and !attrs.shared_value and !attrs.owned_value) or
-            attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.unchecked_thread_safe)
+            (!attrs.concurrency_shareable and !attrs.shared_value and !attrs.owned_value) or
+            attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_trusted_extern)
         {
             try self.rejectAttrs(attrs, "structs");
             return;
         }
-        try self.parseStruct(layout, is_pub, .{ .is_sync_resource = attrs.sync_resource, .is_shared_value = attrs.shared_value, .is_owned_value = attrs.owned_value });
+        try self.parseStruct(layout, is_pub, .{ .is_concurrency_shareable = attrs.concurrency_shareable, .is_shared_value = attrs.shared_value, .is_owned_value = attrs.owned_value });
     }
 
     const StructAttrFlags = struct {
-        is_sync_resource: bool = false,
+        is_concurrency_shareable: bool = false,
         is_shared_value: bool = false,
         is_owned_value: bool = false,
     };
@@ -1210,7 +1210,7 @@ const Parser = struct {
             .fields = try fields.toOwnedSlice(self.allocator),
             .methods = try methods.toOwnedSlice(self.allocator),
             .is_pub = is_pub,
-            .is_sync_resource = flags.is_sync_resource,
+            .is_concurrency_shareable = flags.is_concurrency_shareable,
             .is_shared_value = flags.is_shared_value,
             .is_owned_value = flags.is_owned_value,
             .name_token = name,
@@ -1340,17 +1340,17 @@ const Parser = struct {
         const abi_name = try self.parseCAbiSpecifier("extern");
 
         if (self.match(.keyword_fn)) {
-            if (attrs.hasAny() and (!attrs.unchecked_thread_safe or attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.sync_resource)) {
+            if (attrs.hasAny() and (!attrs.concurrency_trusted_extern or attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_shareable)) {
                 try self.rejectAttrs(attrs, "`extern` declarations");
                 return;
             }
-            try self.functions.append(self.allocator, try self.parseFunctionDecl(null, is_pub, .c, true, false, false, attrs.unchecked_thread_safe, false, abi_name));
+            try self.functions.append(self.allocator, try self.parseFunctionDecl(null, is_pub, .c, true, false, false, attrs.concurrency_trusted_extern, false, abi_name));
             _ = try self.expect(.semicolon, "expected `;` after extern function declaration");
             return;
         }
 
-        if (attrs.unchecked_thread_safe) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `unchecked_thread_safe` is only supported on extern functions", .{});
+        if (attrs.concurrency_trusted_extern) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.trusted_extern` is only supported on extern functions", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.hasAny()) {
@@ -1502,8 +1502,8 @@ const Parser = struct {
             try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `asm.export` is only valid on constants", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.sync_resource) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `sync_resource` is only supported on structs", .{});
+        if (attrs.concurrency_shareable) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.shareable` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.owned_value) {
@@ -1511,7 +1511,7 @@ const Parser = struct {
             return ParseError.ParseFailed;
         }
         if (attrs.sequence_literal) {
-            if (owner != null or !is_pub or attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.shared_value or attrs.isolated or attrs.intrinsic_name != null or attrs.unchecked_thread_safe) {
+            if (owner != null or !is_pub or attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.shared_value or attrs.isolated or attrs.intrinsic_name != null or attrs.concurrency_trusted_extern) {
                 try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `syntax.sequence_literal` requires a public Cyna factory function", .{});
                 return ParseError.ParseFailed;
             }
@@ -1521,7 +1521,7 @@ const Parser = struct {
             return;
         }
         if (attrs.intrinsic_name) |intrinsic_name| {
-            if (attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.sync_resource or attrs.shared_value or attrs.unchecked_thread_safe) {
+            if (attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_shareable or attrs.shared_value or attrs.concurrency_trusted_extern) {
                 try self.diagnostic_context.emitToken(self.path, attrs.intrinsic_token.?, "attribute `intrinsic` cannot be combined with other function attributes", .{});
                 return ParseError.ParseFailed;
             }
@@ -1532,12 +1532,12 @@ const Parser = struct {
             _ = try self.expect(.semicolon, "expected `;` after intrinsic function declaration");
             return;
         }
-        if (attrs.unchecked_thread_safe and !attrs.link_import) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `unchecked_thread_safe` is only supported on extern functions", .{});
+        if (attrs.concurrency_trusted_extern and !attrs.link_import) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.trusted_extern` is only supported on extern functions", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.isolated and (attrs.abi_c or attrs.link_import or attrs.link_export)) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `isolated` cannot be combined with ABI or link attributes yet", .{});
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.isolated` cannot be combined with ABI or link attributes yet", .{});
             return ParseError.ParseFailed;
         }
         try self.validateLinkAttrsRequireAbi(attrs);
@@ -1552,7 +1552,7 @@ const Parser = struct {
         const is_extern = attrs.link_import;
         const is_export = attrs.link_export;
         const expect_body = !is_extern;
-        try self.functions.append(self.allocator, try self.parseFunctionDecl(owner, is_pub, .c, is_extern, is_export, false, attrs.unchecked_thread_safe, expect_body, attrs.abi_name));
+        try self.functions.append(self.allocator, try self.parseFunctionDecl(owner, is_pub, .c, is_extern, is_export, false, attrs.concurrency_trusted_extern, expect_body, attrs.abi_name));
         if (is_extern) {
             _ = try self.expect(.semicolon, "expected `;` after imported function declaration");
         }
@@ -1571,7 +1571,7 @@ const Parser = struct {
             return method;
         }
         if (attrs.slice_view) {
-            if (attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.sync_resource or attrs.shared_value or attrs.unchecked_thread_safe or attrs.intrinsic_name != null or attrs.sequence_literal) {
+            if (attrs.abi_c or attrs.link_import or attrs.link_export or attrs.asm_export or attrs.isolated or attrs.concurrency_shareable or attrs.shared_value or attrs.concurrency_trusted_extern or attrs.intrinsic_name != null or attrs.sequence_literal) {
                 try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `syntax.slice_view` cannot be combined with other method attributes", .{});
                 return ParseError.ParseFailed;
             }
@@ -1586,8 +1586,8 @@ const Parser = struct {
             try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `asm.export` is only valid on constants", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.sync_resource) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `sync_resource` is only supported on structs", .{});
+        if (attrs.concurrency_shareable) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.shareable` is only supported on structs", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.sequence_literal) {
@@ -1598,8 +1598,8 @@ const Parser = struct {
             try self.diagnostic_context.emitToken(self.path, attrs.intrinsic_token.?, "intrinsic declarations must be top-level functions", .{});
             return ParseError.ParseFailed;
         }
-        if (attrs.unchecked_thread_safe) {
-            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `unchecked_thread_safe` is only supported on extern functions", .{});
+        if (attrs.concurrency_trusted_extern) {
+            try self.diagnostic_context.emitToken(self.path, attrs.first_token.?, "attribute `concurrency.trusted_extern` is only supported on extern functions", .{});
             return ParseError.ParseFailed;
         }
         if (attrs.abi_c or attrs.link_import or attrs.link_export) {
@@ -1621,7 +1621,7 @@ const Parser = struct {
         });
     }
 
-    fn parseFunctionDecl(self: *Parser, owner: ?[]const u8, is_pub: bool, calling_convention: ast.CallingConvention, is_extern: bool, is_export: bool, is_isolated: bool, is_unchecked_thread_safe: bool, expect_body: bool, abi_name_override: ?[]const u8) ParseError!ast.Function {
+    fn parseFunctionDecl(self: *Parser, owner: ?[]const u8, is_pub: bool, calling_convention: ast.CallingConvention, is_extern: bool, is_export: bool, is_isolated: bool, is_concurrency_trusted_extern: bool, expect_body: bool, abi_name_override: ?[]const u8) ParseError!ast.Function {
         const name = try self.expect(.identifier, "expected function name");
         const type_params = try self.parseGenericParams();
         errdefer {
@@ -1662,7 +1662,7 @@ const Parser = struct {
             .is_extern = is_extern,
             .is_export = is_export,
             .is_isolated = is_isolated,
-            .is_unchecked_thread_safe = is_unchecked_thread_safe,
+            .is_concurrency_trusted_extern = is_concurrency_trusted_extern,
             .calling_convention = calling_convention,
             .name_token = name,
         };

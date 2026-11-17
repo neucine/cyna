@@ -23,6 +23,14 @@ and result types. This is an inferred, compiler-recognized boundary: ordinary
 named entrypoints need no declaration annotation when the checker can prove
 their reachable behavior safe. An unchecked foreign boundary requires explicit
 authority from a trusted compiler or standard-library declaration.
+`@concurrency.isolated` is an optional checked function contract; it is not a
+requirement for worker entrypoints and does not prove every runtime effect safe.
+`@concurrency.shareable` marks trusted std/core synchronization wrappers whose
+values can cross and be shared across worker boundaries. It is separate from
+`@ownership.shared`, which controls backing storage retention. An extern
+declaration may use `@concurrency.trusted_extern` to assert that its
+opaque call is safe at such a boundary. Neither attribute is needed on an
+ordinary application worker.
 
 Borrowed references, slices, and raw pointers cannot be ordinary owned inputs
 to detached-capable work. A worker may outlive the caller's frame. Thread-safe

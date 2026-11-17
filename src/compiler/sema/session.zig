@@ -148,7 +148,7 @@ pub const InstantiatedStructDecl = struct {
     layout: ast.StructLayout,
     is_shared_value: bool = false,
     is_owned_value: bool = false,
-    is_sync_resource: bool = false,
+    is_concurrency_shareable: bool = false,
     type_args: []semantic_types.GenericArgument,
     fields: []InstantiatedStructField,
 

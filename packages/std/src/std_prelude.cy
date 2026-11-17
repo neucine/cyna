@@ -2,7 +2,7 @@ pub extern c fn print_string(value: string): void;
 pub extern c fn print_int(value: i64, signed: bool): void;
 pub extern c fn print_bool(value: bool): void;
 pub extern c fn print_newline(): void;
-@unchecked_thread_safe
+@concurrency.trusted_extern
 pub extern c fn panic(message: string): void;
 
 pub protocol Eq {

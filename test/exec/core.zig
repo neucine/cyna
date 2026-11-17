@@ -41,7 +41,7 @@ test "Thread scope exit and explicit drop leave workers running" {
         \\import std.time;
         \\import { AtomicI32, MemoryOrder, SyncStatus } from std.sync;
         \\struct Work { counter: AtomicI32; amount: i32; }
-        \\@isolated
+        \\@concurrency.isolated
         \\fn add(work: Work): void { const ignored = work.counter.fetch_add(work.amount, MemoryOrder.seq_cst); }
         \\fn leave_scope(counter: AtomicI32): bool {
         \\    const handle = thread.spawn(add, Work { counter: counter, amount: 1 }) catch (problem) {

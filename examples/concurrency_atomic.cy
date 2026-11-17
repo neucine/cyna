@@ -7,7 +7,7 @@ struct Work {
     amount: i32;
 }
 
-@isolated
+@concurrency.isolated
 fn add(work: Work): void {
     const ignored = work.counter.fetch_add(work.amount, MemoryOrder.seq_cst);
 }

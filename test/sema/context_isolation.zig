@@ -214,7 +214,7 @@ test "function-local isolated state is reset after semantic failure" {
         "context_isolation_isolated_failure.cy",
         \\var counter: i32 = 0;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(): i32 {
         \\    counter = 1;
         \\    return counter;

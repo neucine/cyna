@@ -434,7 +434,7 @@ test "native std.thread spawn accepts string payload" {
         try compat.fileWriteAll(file,
             \\import std.thread;
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(value: string): void {
             \\    const ignored = value;
             \\}
@@ -474,7 +474,7 @@ test "native std.thread generic spawn starts and joins i32 worker" {
         try compat.fileWriteAll(file,
             \\import std.thread;
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(value: i32): void {
             \\    const ignored = value;
             \\}
@@ -515,7 +515,7 @@ test "native std.thread exposes opaque thread ids" {
         try compat.fileWriteAll(file,
             \\import std.thread;
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(value: i32): void {
             \\    const ignored = value;
             \\}
@@ -566,7 +566,7 @@ test "native std.thread generic spawn routes i32 payload to hosted worker" {
         try compat.fileWriteAll(file,
             \\import std.thread;
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(value: i32): void {
             \\    const ignored = value;
             \\}
@@ -612,7 +612,7 @@ test "native std.thread generic spawn copies structured transferable payload" {
             \\    name: string;
             \\}
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(job: Job): void {
             \\    assert(job.id == 40);
             \\    assert(job.name == "Ada");
@@ -652,7 +652,7 @@ test "native std.thread spawn_boxed copies payload and joins hosted worker" {
         \\extern c("call_spawn_boxed_aligned") fn call_spawn_boxed_aligned(): c_int;
         \\extern c("set_spawn_boxed_seen") fn set_spawn_boxed_seen(value: c_int): void;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn unused_worker(value: i32): void {
         \\    const ignored = value;
         \\}
@@ -923,7 +923,7 @@ test "native std.sync condvar wakes hosted worker" {
             \\    done: AtomicBool;
             \\}
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn waiter(work: Work): void {
             \\    if work.mutex.lock() != SyncStatus.ok {
             \\        return;
@@ -1026,7 +1026,7 @@ test "native std.thread workers share std.sync atomic handle" {
             \\    amount: i32;
             \\}
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(work: Work): void {
             \\    const ignored = work.counter.fetch_add(work.amount, MemoryOrder.seq_cst);
             \\}
@@ -1098,7 +1098,7 @@ test "native std.thread workers share std.sync atomic usize handle" {
             \\    amount: usize;
             \\}
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(work: Work): void {
             \\    const ignored = work.counter.fetch_add(work.amount, MemoryOrder.seq_cst);
             \\}

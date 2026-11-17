@@ -46,7 +46,7 @@ test "parser accepts module import pub and distinct declarations" {
         \\pub c struct Handle {
         \\    pub raw: c_ulong;
         \\
-        \\    @isolated
+        \\    @concurrency.isolated
         \\    pub fn valid(self: Handle): bool {
         \\        return self.raw != 0;
         \\    }
@@ -104,7 +104,7 @@ test "parser accepts module import pub and distinct declarations" {
 
 test "parser records thread safety attributes" {
     const source =
-        \\@sync_resource
+        \\@concurrency.shareable
         \\pub struct Mutex {
         \\    raw: c_ulong;
         \\}
@@ -119,7 +119,7 @@ test "parser records thread safety attributes" {
         \\    raw: c_ulong;
         \\}
         \\
-        \\@unchecked_thread_safe
+        \\@concurrency.trusted_extern
         \\extern c("tick") fn tick(): void;
         \\
         \\fn main(): i32 {
@@ -133,12 +133,12 @@ test "parser records thread safety attributes" {
     defer program.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(usize, 3), program.structs.len);
-    try std.testing.expect(program.structs[0].is_sync_resource);
+    try std.testing.expect(program.structs[0].is_concurrency_shareable);
     try std.testing.expect(program.structs[1].is_shared_value);
     try std.testing.expect(program.structs[2].is_owned_value);
     try std.testing.expectEqual(@as(usize, 2), program.functions.len);
     try std.testing.expect(program.functions[0].is_extern);
-    try std.testing.expect(program.functions[0].is_unchecked_thread_safe);
+    try std.testing.expect(program.functions[0].is_concurrency_trusted_extern);
 }
 
 test "parser accepts test blocks for dedicated test files" {

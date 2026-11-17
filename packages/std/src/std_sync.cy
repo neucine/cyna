@@ -18,84 +18,84 @@ pub enum MemoryOrder: i32 {
     seq_cst,
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct Mutex {
     raw: c_ulong;
 
-    @isolated
+    @concurrency.isolated
     pub fn init(): Mutex {
         return mutex_init();
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn is_valid(self: Mutex): bool {
         return mutex_is_valid(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn lock(self: Mutex): SyncStatus {
         return mutex_lock(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn try_lock(self: Mutex): SyncStatus {
         return mutex_try_lock(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn unlock(self: Mutex): SyncStatus {
         return mutex_unlock(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn destroy(self: Mutex): SyncStatus {
         return mutex_destroy(self);
     }
 
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct Condvar {
     raw: c_ulong;
 
-    @isolated
+    @concurrency.isolated
     pub fn init(): Condvar {
         return condvar_init();
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn is_valid(self: Condvar): bool {
         return condvar_is_valid(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn wait(self: Condvar, mutex: Mutex): SyncStatus {
         return condvar_wait(self, mutex);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn signal(self: Condvar): SyncStatus {
         return condvar_signal(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn broadcast(self: Condvar): SyncStatus {
         return condvar_broadcast(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn destroy(self: Condvar): SyncStatus {
         return condvar_destroy(self);
     }
 
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct SharedHandle {
     raw: c_ulong;
 }
 
-@sync_resource
+@concurrency.shareable
 pub struct Shared<T> {
     handle: SharedHandle;
 
@@ -178,7 +178,7 @@ fn share<T>(value: T): Shared<T> {
     };
 }
 
-@sync_resource
+@concurrency.shareable
 pub struct Locked<T> {
     shared: Shared<T>;
 
@@ -230,7 +230,7 @@ pub fn locked<T>(value: T): Locked<T> {
     };
 }
 
-@sync_resource
+@concurrency.shareable
 pub struct ConcurrentList<T> {
     shared: Shared<List<T>>;
 
@@ -380,7 +380,7 @@ pub fn concurrent_list<T>(): ConcurrentList<T> {
     };
 }
 
-@sync_resource
+@concurrency.shareable
 pub struct ConcurrentSlotMap<T> {
     shared: Shared<SlotMap<T>>;
 
@@ -487,133 +487,133 @@ pub fn concurrent_slot_map<T>(): ConcurrentSlotMap<T> {
     };
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct AtomicI32 {
     raw: c_ulong;
 
-    @isolated
+    @concurrency.isolated
     pub fn init(value: i32): AtomicI32 {
         return atomic_i32_init(value);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn is_valid(self: AtomicI32): bool {
         return atomic_i32_is_valid_raw(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn deinit(self: AtomicI32): SyncStatus {
         return atomic_i32_deinit(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn load(self: AtomicI32, order: MemoryOrder): i32 {
         return atomic_i32_load(self, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn store(self: AtomicI32, value: i32, order: MemoryOrder): SyncStatus {
         return atomic_i32_store(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn exchange(self: AtomicI32, value: i32, order: MemoryOrder): i32 {
         return atomic_i32_exchange(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn fetch_add(self: AtomicI32, value: i32, order: MemoryOrder): i32 {
         return atomic_i32_fetch_add(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn compare_exchange(self: AtomicI32, expected: i32, desired: i32, success: MemoryOrder, failure: MemoryOrder): bool {
         return atomic_i32_compare_exchange(self, expected, desired, success, failure);
     }
 
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct AtomicUsize {
     raw: c_ulong;
 
-    @isolated
+    @concurrency.isolated
     pub fn init(value: usize): AtomicUsize {
         return atomic_usize_init(value);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn is_valid(self: AtomicUsize): bool {
         return atomic_usize_is_valid_raw(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn deinit(self: AtomicUsize): SyncStatus {
         return atomic_usize_deinit(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn load(self: AtomicUsize, order: MemoryOrder): usize {
         return atomic_usize_load(self, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn store(self: AtomicUsize, value: usize, order: MemoryOrder): SyncStatus {
         return atomic_usize_store(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn exchange(self: AtomicUsize, value: usize, order: MemoryOrder): usize {
         return atomic_usize_exchange(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn fetch_add(self: AtomicUsize, value: usize, order: MemoryOrder): usize {
         return atomic_usize_fetch_add(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn compare_exchange(self: AtomicUsize, expected: usize, desired: usize, success: MemoryOrder, failure: MemoryOrder): bool {
         return atomic_usize_compare_exchange(self, expected, desired, success, failure);
     }
 
 }
 
-@sync_resource
+@concurrency.shareable
 pub c struct AtomicBool {
     raw: c_ulong;
 
-    @isolated
+    @concurrency.isolated
     pub fn init(value: bool): AtomicBool {
         return atomic_bool_init(value);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn is_valid(self: AtomicBool): bool {
         return atomic_bool_is_valid_raw(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn deinit(self: AtomicBool): SyncStatus {
         return atomic_bool_deinit(self);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn load(self: AtomicBool, order: MemoryOrder): bool {
         return atomic_bool_load(self, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn store(self: AtomicBool, value: bool, order: MemoryOrder): SyncStatus {
         return atomic_bool_store(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn exchange(self: AtomicBool, value: bool, order: MemoryOrder): bool {
         return atomic_bool_exchange(self, value, order);
     }
 
-    @isolated
+    @concurrency.isolated
     pub fn compare_exchange(self: AtomicBool, expected: bool, desired: bool, success: MemoryOrder, failure: MemoryOrder): bool {
         return atomic_bool_compare_exchange(self, expected, desired, success, failure);
     }

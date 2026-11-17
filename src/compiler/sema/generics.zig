@@ -466,7 +466,7 @@ pub fn instantiateGenericStructWithTypeArgs(
             .layout = decl.layout,
             .is_shared_value = decl.is_shared_value,
             .is_owned_value = decl.is_owned_value,
-            .is_sync_resource = decl.is_sync_resource,
+            .is_concurrency_shareable = decl.is_concurrency_shareable,
             .type_args = type_args,
             .fields = try fields.toOwnedSlice(allocator),
         };

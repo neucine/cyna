@@ -353,7 +353,7 @@ pub const StructDecl = struct {
     fields: []FieldDecl,
     methods: []Function,
     is_pub: bool,
-    is_sync_resource: bool = false,
+    is_concurrency_shareable: bool = false,
     is_shared_value: bool = false,
     is_owned_value: bool = false,
     owns_name: bool = false,
@@ -427,7 +427,7 @@ pub const Function = struct {
     is_extern: bool,
     is_export: bool,
     is_isolated: bool = false,
-    is_unchecked_thread_safe: bool = false,
+    is_concurrency_trusted_extern: bool = false,
     calling_convention: CallingConvention,
     name_token: lexer.Token,
 

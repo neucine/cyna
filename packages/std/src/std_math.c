@@ -1,11 +1,19 @@
 #include <math.h>
 #include <float.h>
+#include <stdint.h>
+#include <string.h>
 
 double cyna_std_math_log2_f64(double value) { return log2(value); }
 double cyna_std_math_log_f64(double value) { return log(value); }
 double cyna_std_math_exp_f64(double value) { return exp(value); }
 double cyna_std_math_sqrt_f64(double value) { return sqrt(value); }
 double cyna_std_math_pow_f64(double base, double exponent) { return pow(base, exponent); }
+uint64_t cyna_std_math_pow_f64_bits(double base, double exponent) {
+    double value = pow(base, exponent);
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
 double cyna_std_math_round_f64(double value) { return round(value); }
 float cyna_std_math_log2_f32(float value) { return log2f(value); }
 float cyna_std_math_exp2_f32(float value) { return exp2f(value); }

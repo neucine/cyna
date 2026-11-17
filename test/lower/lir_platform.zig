@@ -49,7 +49,7 @@ test "LIR lowers generic thread spawn i32 through boxed primitive" {
     const source =
         \\import std.thread;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(value: i32): void {
         \\    const ignored = value;
         \\}
@@ -76,7 +76,7 @@ test "LIR lowers generic thread spawn string through boxed primitive" {
     const source =
         \\import std.thread;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(value: string): void {
         \\    const ignored = value;
         \\}
@@ -103,7 +103,7 @@ test "LIR lowers generic thread spawn optional payload through shaped boxed prim
     const source =
         \\import std.thread;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(value: ?i32): void {
         \\    const ignored = value;
         \\}

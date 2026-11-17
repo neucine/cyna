@@ -218,7 +218,7 @@ pub extern c fn cwd(): string ! ProcessError;
 pub extern c fn exe_path(): string ! ProcessError;
 pub extern c fn pid(): u32 ! ProcessError;
 pub extern c fn parent_pid(): ?u32 ! ProcessError;
-@unchecked_thread_safe
+@concurrency.trusted_extern
 pub extern c fn env_get(key: string): ?string;
 pub extern c fn env_set(key: string, value: string): void ! ProcessError;
 pub extern c fn env_unset(key: string): void ! ProcessError;

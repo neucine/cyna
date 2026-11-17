@@ -1318,7 +1318,7 @@ pub const StructLookup = struct {
     layout: ast.StructLayout,
     is_shared_value: bool = false,
     is_owned_value: bool = false,
-    is_sync_resource: bool = false,
+    is_concurrency_shareable: bool = false,
     fields: Fields,
 
     const Fields = union(enum) {
@@ -1541,7 +1541,7 @@ pub fn Lookup(comptime SemaContext: type) type {
                     .layout = decl.layout,
                     .is_shared_value = decl.is_shared_value,
                     .is_owned_value = decl.is_owned_value,
-                    .is_sync_resource = decl.is_sync_resource,
+                    .is_concurrency_shareable = decl.is_concurrency_shareable,
                     .fields = .{ .ast_fields = decl.fields },
                 };
             }
@@ -1552,7 +1552,7 @@ pub fn Lookup(comptime SemaContext: type) type {
                     .layout = decl.layout,
                     .is_shared_value = decl.is_shared_value,
                     .is_owned_value = decl.is_owned_value,
-                    .is_sync_resource = decl.is_sync_resource,
+                    .is_concurrency_shareable = decl.is_concurrency_shareable,
                     .fields = .{ .inst_fields = decl.fields },
                 };
             }
@@ -1613,7 +1613,7 @@ pub fn Lookup(comptime SemaContext: type) type {
                             .layout = decl.layout,
                             .is_shared_value = decl.is_shared_value,
                             .is_owned_value = decl.is_owned_value,
-                            .is_sync_resource = decl.is_sync_resource,
+                            .is_concurrency_shareable = decl.is_concurrency_shareable,
                             .fields = .{ .inst_fields = decl.fields },
                         }
                     else
@@ -2416,11 +2416,11 @@ pub const lowering = struct {
                 for (program.structs) |decl| {
                     try validateSliceViewMethods(context, path, decl);
                     try validateSyntaxMethods(context, path, decl);
-                    if (decl.is_sync_resource and !intrinsics.moduleHasCapability(decl.module_name, .declare_sync_resource)) {
-                        try context.diagnostic_context.emitToken(path, decl.name_token, "attribute `sync_resource` is only supported in std/core modules", .{});
+                    if (decl.is_concurrency_shareable and !intrinsics.moduleHasCapability(decl.module_name, .declare_concurrency_shareable)) {
+                        try context.diagnostic_context.emitToken(path, decl.name_token, "attribute `concurrency.shareable` is only supported in std/core modules", .{});
                         return SemaError.SemanticFailed;
                     }
-                    if (decl.is_shared_value and !intrinsics.moduleHasCapability(decl.module_name, .declare_sync_resource)) {
+                    if (decl.is_shared_value and !intrinsics.moduleHasCapability(decl.module_name, .declare_concurrency_shareable)) {
                         try context.diagnostic_context.emitToken(path, decl.name_token, "attribute `shared_value` is only supported in std/core modules", .{});
                         return SemaError.SemanticFailed;
                     }
@@ -2428,7 +2428,7 @@ pub const lowering = struct {
                         try context.diagnostic_context.emitToken(path, decl.name_token, "shared ownership requires a trusted retain and release runtime contract", .{});
                         return SemaError.SemanticFailed;
                     }
-                    if (decl.is_owned_value and !intrinsics.moduleHasCapability(decl.module_name, .declare_sync_resource)) {
+                    if (decl.is_owned_value and !intrinsics.moduleHasCapability(decl.module_name, .declare_concurrency_shareable)) {
                         try context.diagnostic_context.emitToken(path, decl.name_token, "attribute `ownership.owned` is only supported in std/core modules", .{});
                         return SemaError.SemanticFailed;
                     }

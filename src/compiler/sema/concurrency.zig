@@ -101,7 +101,7 @@ pub fn isTrustedResource(registry: *const identity.Registry, decl_id: identity.D
 
 pub fn isTrustedIsolatedExtern(callee: ast.Function) bool {
     if (!callee.is_extern) return false;
-    if (callee.is_unchecked_thread_safe) return true;
+    if (callee.is_concurrency_trusted_extern) return true;
     return intrinsics.moduleHasCapability(callee.module_name, .trusted_isolated_extern);
 }
 
@@ -302,9 +302,9 @@ pub fn Walker(comptime host: anytype) type {
             return canonicalFirstNonTransferableResourcePath(context, allocator, path, program, type_id, root, &visited);
         }
 
-        fn canonicalTypeIsSyncResource(context: *SemaContext, program: ast.Program, type_id: semantic_types.TypeId) bool {
+        fn canonicalTypeIsConcurrencyShareable(context: *SemaContext, program: ast.Program, type_id: semantic_types.TypeId) bool {
             const decl = canonicalStructLookup(context, program, type_id) orelse return false;
-            return decl.is_sync_resource;
+            return decl.is_concurrency_shareable;
         }
 
         fn canonicalArcPayloadType(context: *SemaContext, type_id: semantic_types.TypeId) ?semantic_types.TypeId {
@@ -411,7 +411,7 @@ pub fn Walker(comptime host: anytype) type {
             if (canonicalArcPayloadType(context, type_id)) |payload| {
                 return canonicalTypeSatisfiesThreadCapability(context, path, program, payload, visited, true);
             }
-            if (canonicalTypeIsSyncResource(context, program, type_id)) return true;
+            if (canonicalTypeIsConcurrencyShareable(context, program, type_id)) return true;
             if (canonicalTypeVisited(visited.items, type_id)) return true;
             try visited.append(context.allocator, type_id);
             defer _ = visited.pop();
@@ -536,7 +536,7 @@ pub fn Walker(comptime host: anytype) type {
             if (canonicalArcPayloadType(context, type_id)) |payload| {
                 return canonicalFirstNonTransferableResourcePath(context, allocator, path, program, payload, prefix, visited);
             }
-            if (canonicalTypeIsSyncResource(context, program, type_id)) return null;
+            if (canonicalTypeIsConcurrencyShareable(context, program, type_id)) return null;
             if (canonicalTypeVisited(visited.items, type_id)) return null;
             try visited.append(allocator, type_id);
             defer _ = visited.pop();
@@ -697,7 +697,7 @@ pub fn Walker(comptime host: anytype) type {
             }).decl;
             if (contract.entry_must_be_isolated) {
                 if (!entry.is_isolated or entry.is_extern) {
-                    try context.diagnostic_context.emitToken(path, entry_name.token, "concurrency boundary `{s}.{s}` entrypoint `{s}` must be isolated", .{ owner, name, entry.name });
+                    try context.diagnostic_context.emitToken(path, entry_name.token, "concurrency boundary `{s}.{s}` entrypoint `{s}` must be marked @concurrency.isolated", .{ owner, name, entry.name });
                     return SemaError.SemanticFailed;
                 }
             } else if (try analyzeThreadBoundaryEntrypoint(context, allocator, program, current_module, globals, entry, .resource_reachability)) |trace| {
@@ -796,7 +796,7 @@ pub fn Walker(comptime host: anytype) type {
             return try makeFormattedThreadBoundaryTrace(
                 allocator,
                 stack.items,
-                "function `{s}` is not marked `@isolated`",
+                "function `{s}` is not marked `@concurrency.isolated`",
                 .{function.name},
                 null,
             );
@@ -1267,7 +1267,7 @@ pub fn Walker(comptime host: anytype) type {
             object: *const ast.Expr,
         ) SemaError!bool {
             const ty = (try mutableGlobalReceiverType(context, path, program, current_module, globals, locals, object)) orelse return false;
-            return canonicalTypeIsSyncResource(context, program, ty);
+            return canonicalTypeIsConcurrencyShareable(context, program, ty);
         }
 
         fn mutableGlobalReceiverType(

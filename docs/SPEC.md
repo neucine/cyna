@@ -541,8 +541,10 @@ void
 ```
 
 `iN` and `uN` are signed and unsigned fixed-width integer types with exactly
-`N` value bits. `u1` is a numeric one-bit integer, not `bool`. The common widths
-`i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, and `u64` should be preferred in
+`N` value bits, where `N` is any integer from 1 through 64. Wider types such as
+`i128` and `u128` are not supported. `u1` is a numeric one-bit integer, not
+`bool`. The common widths `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, and `u64`
+should be preferred in
 ordinary code; sub-byte and unusual widths are mainly for packed layouts,
 register descriptions, protocols, and generated bindings.
 
@@ -5356,9 +5358,25 @@ attribute forms into a different ABI. Formatters do not silently migrate one
 accepted family into the other.
 
 Attributes are canonical for compiler-known declaration metadata that has no
-semantic keyword, including `@isolated` and trusted std/compiler contracts.
+semantic keyword, including `@concurrency.isolated` and trusted std/compiler contracts.
 Unknown attributes are errors. Parameter attributes, type attributes, and
 alternative attribute spellings for `c fn(...)` are outside v1.
+
+The concurrency attributes have distinct contracts:
+
+| Attribute | Valid declaration | Meaning |
+| --- | --- | --- |
+| `@concurrency.isolated` | Cyna function or method with a body | The compiler checks reachable calls and access to mutable global state under the isolated function rules. Worker entrypoints do not need this attribute when the compiler can inspect their reachable calls. |
+| `@concurrency.shareable` | Non-packed struct in a trusted std/core module | The type's implementation promises that values can cross a worker boundary and be shared across workers. The compiler accepts this promise without checking the struct's fields for those capabilities. |
+| `@concurrency.trusted_extern` | Imported extern function | The declaration author promises that the opaque call is safe to use from isolated or worker code. The compiler cannot inspect the foreign body. |
+
+`@ownership.owned` and `@ownership.shared` govern value handoff and backing
+storage. They do not grant either concurrency capability. Application code
+normally uses the `std.sync` types and inferred worker checks rather than these
+trusted declarations. The former `@sync_resource`, `@unchecked_thread_safe`,
+and `@isolated` spellings are no longer accepted.
+`@concurrency.isolated` is a limited static check, not a proof that every
+runtime effect or foreign function body is safe.
 
 ABI boundary specifiers have an optional external-name override:
 

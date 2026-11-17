@@ -116,9 +116,9 @@ implementation gaps. Availability is not a claim of complete verification.
   plus handle methods
 - `std.sync` primitives expose opaque hosted handles with private
   implementation-defined native/runtime storage, not portable identities
-- recognized thread-boundary analysis treats `std.sync` handles as sync
-  resources; arbitrary user extern calls remain rejected unless explicitly
-  marked unchecked thread-safe
+- recognized thread-boundary analysis treats `std.sync` handles marked
+  `@concurrency.shareable` as transferable and shareable; arbitrary user extern
+  calls remain rejected unless explicitly marked `@concurrency.trusted_extern`
 - runtime string retain/release uses atomic refcounting, so immutable string
   backing can be safely shared across hosted concurrency boundaries
 - core `std.json` provides strict RFC 8259 validation, owned parsing, ordered

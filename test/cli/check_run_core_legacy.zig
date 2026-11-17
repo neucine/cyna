@@ -256,7 +256,7 @@ test "check command accepts hosted std.thread import" {
         try compat.fileWriteAll(file,
             \\import std.thread;
             \\
-            \\@isolated
+            \\@concurrency.isolated
             \\fn worker(value: i32): void {
             \\    const ignored = value;
             \\}

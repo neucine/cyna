@@ -90,11 +90,14 @@ test "test command links imported std.math C companion" {
         \\    const rounded = math.to_f32_rounded(0.1);
         \\    if rounded is none { assert(false); }
         \\}
+        \\test "power overflow to infinity" {
+        \\    assert(math.pow_f64(2.0, 1024.0) > 1.0);
+        \\}
     );
 
     const root = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, ".");
     defer std.testing.allocator.free(root);
-    const result = try runCommand(&.{ "zig", "build", "run", "--", "test", root, "--filter", "standard rounded conversion" });
+    const result = try runCommand(&.{ "zig", "build", "run", "--", "test", root });
     defer {
         std.testing.allocator.free(result.stdout);
         std.testing.allocator.free(result.stderr);
@@ -102,7 +105,7 @@ test "test command links imported std.math C companion" {
     errdefer std.debug.print("std.math test CLI stderr:\n{s}\n", .{result.stderr});
 
     try std.testing.expectEqual(@as(u8, 0), result.term.exited);
-    try expectTestSummary(result.stderr, 1, 0);
+    try expectTestSummary(result.stderr, 2, 0);
 }
 
 test "test command fails for an invalid project manifest" {

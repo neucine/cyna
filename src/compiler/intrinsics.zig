@@ -229,14 +229,14 @@ pub fn mutatesReceiver(id: Id) bool {
 }
 
 pub const ModuleCapability = enum {
-    declare_sync_resource,
+    declare_concurrency_shareable,
     trusted_isolated_extern,
     trusted_internal_abi,
 };
 
 pub fn moduleHasCapability(module_name: []const u8, capability: ModuleCapability) bool {
     return switch (capability) {
-        .declare_sync_resource => moduleInNamespace(module_name, "std") or moduleInNamespace(module_name, "core"),
+        .declare_concurrency_shareable => moduleInNamespace(module_name, "std") or moduleInNamespace(module_name, "core"),
         .trusted_isolated_extern => std.mem.eql(u8, module_name, "std.sync"),
         .trusted_internal_abi => moduleInNamespace(module_name, "std"),
     };
@@ -336,5 +336,5 @@ test "syntax roles and module capabilities are centralized" {
     try std.testing.expect(resolveSyntaxRole(null) == null);
     try std.testing.expect(moduleHasCapability("std.sync", .trusted_isolated_extern));
     try std.testing.expect(!moduleHasCapability("std.thread", .trusted_isolated_extern));
-    try std.testing.expect(moduleHasCapability("core.alloc", .declare_sync_resource));
+    try std.testing.expect(moduleHasCapability("core.alloc", .declare_concurrency_shareable));
 }

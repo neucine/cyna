@@ -1476,12 +1476,12 @@ test "concurrency inference accepts interpolated local shadow of mutable global"
 
 test "isolated function accepts params locals and isolated helper" {
     const source =
-        \\@isolated
+        \\@concurrency.isolated
         \\fn add_one(value: i32): i32 {
         \\    return value + 1;
         \\}
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(job: i32): i32 {
         \\    const base = add_one(job);
         \\    var total = base;
@@ -1499,7 +1499,7 @@ test "isolated function accepts params locals and isolated helper" {
 
 test "isolated attribute is only valid on functions" {
     const source =
-        \\@isolated
+        \\@concurrency.isolated
         \\const answer: i32 = 42;
         \\
         \\fn main(): i32 {
@@ -1511,13 +1511,13 @@ test "isolated attribute is only valid on functions" {
         std.testing.allocator,
         "isolated_rejects_const",
         source,
-        "attribute `isolated` is only supported on functions",
+        "attribute `concurrency.isolated` is only supported on functions",
     );
 }
 
 test "isolated attribute expects no arguments" {
     const source =
-        \\@isolated(true)
+        \\@concurrency.isolated(true)
         \\fn worker(): i32 {
         \\    return 42;
         \\}
@@ -1531,7 +1531,7 @@ test "isolated attribute expects no arguments" {
         std.testing.allocator,
         "isolated_rejects_arguments",
         source,
-        "attribute `isolated` expects no arguments",
+        "attribute `concurrency.isolated` expects no arguments",
     );
 }
 
@@ -1539,7 +1539,7 @@ test "isolated function rejects mutable global read" {
     const source =
         \\var counter: i32 = 1;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(): i32 {
         \\    return counter;
         \\}
@@ -1561,7 +1561,7 @@ test "isolated function rejects mutable global write" {
     const source =
         \\var counter: i32 = 1;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(): void {
         \\    counter = counter + 1;
         \\}
@@ -1586,7 +1586,7 @@ test "isolated function rejects non-isolated call" {
         \\    return value + 1;
         \\}
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(job: i32): i32 {
         \\    return helper(job);
         \\}
@@ -1616,7 +1616,7 @@ test "isolated function reports root violation through helper chain" {
         \\    return leaf(value);
         \\}
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(job: i32): i32 {
         \\    return middle(job);
         \\}
@@ -1640,7 +1640,7 @@ test "isolated function rejects extern call" {
         \\    c fn tick(): void;
         \\}
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(): void {
         \\    tick();
         \\}
@@ -1659,12 +1659,12 @@ test "isolated function rejects extern call" {
     );
 }
 
-test "isolated function accepts unchecked thread safe extern call" {
+test "isolated function accepts trusted extern call" {
     const source =
-        \\@unchecked_thread_safe
+        \\@concurrency.trusted_extern
         \\extern c("tick") fn tick(): void;
         \\
-        \\@isolated
+        \\@concurrency.isolated
         \\fn worker(): void {
         \\    tick();
         \\}
@@ -1675,12 +1675,12 @@ test "isolated function accepts unchecked thread safe extern call" {
         \\}
     ;
 
-    try helpers.expectSemanticSuccess(std.testing.allocator, "isolated_accepts_unchecked_thread_safe_extern", source);
+    try helpers.expectSemanticSuccess(std.testing.allocator, "isolated_accepts_trusted_extern", source);
 }
 
-test "sync resource attribute is std core only" {
+test "shareable attribute is std core only" {
     const source =
-        \\@sync_resource
+        \\@concurrency.shareable
         \\struct Mutex {
         \\    value: i32;
         \\}
@@ -1692,10 +1692,30 @@ test "sync resource attribute is std core only" {
 
     try helpers.expectSemanticFailedMessage(
         std.testing.allocator,
-        "sync_resource_rejects_user_module",
+        "shareable_rejects_user_module",
         source,
-        "attribute `sync_resource` is only supported in std/core modules",
+        "attribute `concurrency.shareable` is only supported in std/core modules",
     );
+}
+
+test "former concurrency attribute spellings are rejected" {
+    const old_isolated =
+        \\@isolated
+        \\fn worker(): void {}
+    ;
+    try helpers.expectParseFailedMessage(std.testing.allocator, "old_isolated_attribute", old_isolated, "unknown attribute `isolated`");
+
+    const old_resource =
+        \\@sync_resource
+        \\struct Mutex { value: i32; }
+    ;
+    try helpers.expectParseFailedMessage(std.testing.allocator, "old_sync_resource_attribute", old_resource, "unknown attribute `sync_resource`");
+
+    const old_extern =
+        \\@unchecked_thread_safe
+        \\extern c("tick") fn tick(): void;
+    ;
+    try helpers.expectParseFailedMessage(std.testing.allocator, "old_unchecked_thread_safe_attribute", old_extern, "unknown attribute `unchecked_thread_safe`");
 }
 
 test "shared value attribute is std core only" {
@@ -2000,7 +2020,7 @@ test "thread spawn accepts sync resource payload field" {
         \\}
     ;
 
-    try helpers.expectLoadedSemanticSuccess(std.testing.allocator, "thread_spawn_accepts_sync_resource_payload_field", source);
+    try helpers.expectLoadedSemanticSuccess(std.testing.allocator, "thread_spawn_accepts_shareable_payload_field", source);
 }
 
 test "std sync share is not public user api" {
@@ -2366,7 +2386,7 @@ test "sync resource struct is transferable and shareable boundary" {
         .fields = borrowed_fields[0..],
         .methods = &.{},
         .is_pub = true,
-        .is_sync_resource = true,
+        .is_concurrency_shareable = true,
         .name_token = zero,
     }};
     const program = ast.Program{
@@ -2420,7 +2440,7 @@ test "std shared resource is a transferable boundary" {
             .fields = handle_fields[0..],
             .methods = &.{},
             .is_pub = true,
-            .is_sync_resource = true,
+            .is_concurrency_shareable = true,
             .name_token = zero,
         },
         .{
@@ -2431,7 +2451,7 @@ test "std shared resource is a transferable boundary" {
             .fields = shared_fields[0..],
             .methods = &.{},
             .is_pub = true,
-            .is_sync_resource = true,
+            .is_concurrency_shareable = true,
             .name_token = zero,
         },
     };
@@ -2575,7 +2595,7 @@ test "non-transferable resource path stops at sync resource" {
             .fields = object_store_fields[0..],
             .methods = &.{},
             .is_pub = false,
-            .is_sync_resource = true,
+            .is_concurrency_shareable = true,
             .name_token = zero,
         },
         .{
@@ -3227,7 +3247,7 @@ test "thread boundary analysis allows mutable global sync resource method receiv
         .fields = &.{},
         .methods = &.{},
         .is_pub = true,
-        .is_sync_resource = true,
+        .is_concurrency_shareable = true,
         .name_token = zero,
     }};
     const program = ast.Program{
@@ -3308,7 +3328,7 @@ test "thread boundary analysis allows nested sync resource field method receiver
             .fields = &.{},
             .methods = &.{},
             .is_pub = true,
-            .is_sync_resource = true,
+            .is_concurrency_shareable = true,
             .name_token = zero,
         },
         .{
@@ -3387,7 +3407,7 @@ test "thread boundary analysis still rejects sync resource global replacement" {
         .fields = &.{},
         .methods = &.{},
         .is_pub = true,
-        .is_sync_resource = true,
+        .is_concurrency_shareable = true,
         .name_token = zero,
     }};
     const program = ast.Program{
