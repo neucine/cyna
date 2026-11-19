@@ -2,6 +2,41 @@ const std = @import("std");
 const helpers = @import("../helpers.zig");
 const compat = @import("cyna").compat;
 
+test "raw pointer locals rebind without writing through the old address" {
+    const source =
+        \\fn read(ptr: *const i32): i32 { unchecked { return *ptr; } }
+        \\fn main(): i32 {
+        \\    const first: [1]i32 = [1];
+        \\    const second: [1]i32 = [42];
+        \\    unchecked {
+        \\        var source: *const i32 = first[..].ptr;
+        \\        source = second[..].ptr;
+        \\        return read(source);
+        \\    }
+        \\}
+    ;
+    try helpers.expectNativeNamedSourceExitCode(std.testing.allocator, "raw_pointer_rebind", "raw_pointer_rebind.cy", source, 42);
+}
+
+test "raw pointer table loads assign into the local slot" {
+    const source =
+        \\struct Pointers { values: *const *c_void; }
+        \\fn load_pointer(holder: &const Pointers, index: usize): *c_void {
+        \\    var result: *c_void = 0 as! *c_void;
+        \\    unchecked { result = *(holder.values + index); }
+        \\    return result;
+        \\}
+        \\fn main(): i32 {
+        \\    var values = list<*c_void>();
+        \\    values.push(0x1000 as! *c_void);
+        \\    const holder = Pointers { values: values[..].ptr };
+        \\    unchecked { if load_pointer(&holder, 0) as! usize == 0x1000 { return 0; } }
+        \\    return 1;
+        \\}
+    ;
+    try helpers.expectNativeNamedSourceExitCode(std.testing.allocator, "raw_pointer_table", "raw_pointer_table.cy", source, 0);
+}
+
 test "integer index syntax converts hook keys for reads writes and aliases" {
     const source =
         \\struct Bag {

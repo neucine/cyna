@@ -1738,6 +1738,25 @@ pub fn emitInstruction(
             defer allocator.free(pointee_ty);
             try writer.print("  %v{} = alloca {s}\n", .{ inst.id.?, pointee_ty });
         },
+        .heap_alloc => |value| {
+            const semantic_ty = info[value].ty orelse return error.BackendInvariantViolation;
+            const value_ty = try types.llvmScalarType(allocator, module, semantic_ty);
+            defer allocator.free(value_ty);
+            const size = (try abi.typeSizeAlign(module, semantic_ty)).size;
+            const size_ref = try std.fmt.allocPrint(allocator, "{}", .{size});
+            defer allocator.free(size_ref);
+            try emitTrackedAllocCall(writer, inst.id.?, size_ref, 1770, ".cyna.alloc.owned.leak");
+            try writer.print("  store {s} ", .{value_ty});
+            try common.writeValueRef(writer, module, info, value);
+            try writer.print(", ptr %v{}", .{inst.id.?});
+            try emitTypeAlignment(writer, module, semantic_ty);
+            try writer.writeByte('\n');
+        },
+        .heap_free => |value| {
+            try writer.writeAll("  call void @cyna_runtime_tracked_free(ptr ");
+            try common.writeValueRef(writer, module, info, value);
+            try writer.writeAll(")\n");
+        },
         .field_ptr => |field| {
             const base_pointee = info[field.ptr].pointee orelse return error.BackendInvariantViolation;
             switch (module.types[base_pointee]) {

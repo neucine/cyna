@@ -2037,7 +2037,7 @@ pub const Module = struct {
                     }
                     if (!root_in_scope) return error.InvalidBindingIdentity;
                     for (place.projections.?) |projection| switch (projection.step) {
-                        .field, .index => {},
+                        .field, .union_payload, .index => {},
                         else => return error.InvalidBindingIdentity,
                     };
                 } else if (local.projected_place != null) return error.InvalidBindingIdentity;
@@ -3095,7 +3095,7 @@ pub const Module = struct {
                 const metadata_effect_site = switch (entry.expr.*) {
                     .local, .global_ref, .ref_load, .string_bytes, .field, .borrowed_field, .tuple_field, .union_field, .borrowed_union_field, .index, .borrowed_index, .ref_local, .ref_global, .ref_alias_local, .ref_owned_local, .ref_field_local, .ref_field_owned_local, .ref_field_expr, .ref_union_field_local, .ref_index_local, .ref_path_local, .ref_index_path_local, .slice_range, .handoff_local, .raw_owned_local, .leak_owned_local, .new_owned, .new_array, .new_sparse, .sparse_indices, .string, .string_from, .string_slice, .interpolated_string, .struct_literal, .union_case, .array_literal, .tuple_literal, .array_default, .dense_array_literal, .sparse_literal, .sparse_keyed_literal, .take_path_local, .take_index_local, .take_index_path_local, .sparse_take, .sequence_pop, .sequence_clear, .sparse_clear, .@"try", .cast => true,
                     .unary => |unary| unary.op == .copy_list,
-                    .int, .float, .rune, .bool, .none, .enum_case, .failure_detail, .is_test, .function_ref, .closure, .thread_spawn_boxed, .task_group_spawn_boxed, .task_result_take, .sync_share_boxed, .closure_capture, .ref_raw_deref, .raw_deref, .binary, .call, .indirect_call, .test_assert, .builtin_print, .sequence_push, .sequence_len, .sparse_len, .sparse_insert, .sparse_contains_index, .sequence_reserve, .string_len, .string_is_empty, .string_starts_with, .string_ends_with, .string_contains, .string_find, .string_rfind, .slice_len, .slice_ptr, .asm_expr, .@"switch" => false,
+                    .int, .float, .rune, .bool, .none, .enum_case, .failure_detail, .is_test, .function_ref, .closure, .thread_spawn_boxed, .task_group_spawn_boxed, .task_result_take, .sync_share_boxed, .closure_capture, .ref_raw_deref, .raw_deref, .from_raw, .binary, .call, .indirect_call, .test_assert, .builtin_print, .sequence_push, .sequence_len, .sparse_len, .sparse_insert, .sparse_contains_index, .sequence_reserve, .string_len, .string_is_empty, .string_starts_with, .string_ends_with, .string_contains, .string_find, .string_rfind, .slice_len, .slice_ptr, .asm_expr, .@"switch" => false,
                 };
                 if (!metadata_effect_site) return error.InvalidCheckedEffect;
             }
@@ -3853,6 +3853,7 @@ pub fn intrinsicForBuiltinExpr(expr: *const Expr) ?IntrinsicId {
 pub fn intrinsicMatchesBuiltinExpr(expr: *const Expr, intrinsic_id: ?IntrinsicId) bool {
     if (intrinsicForBuiltinExpr(expr) == intrinsic_id) return true;
     return switch (expr.*) {
+        .from_raw => intrinsic_id == .resource_from_raw,
         .unary => |unary| switch (unary.op) {
             .copy_list => intrinsic_id == .sequence_clone,
             else => false,
@@ -3966,6 +3967,7 @@ fn exprContains(expr: *const Expr, target: *const Expr) bool {
         .ref_path_local, .take_path_local => |take_path| takeStepsContain(take_path.steps, target),
         .ref_load => |value| exprContains(value, target),
         .ref_raw_deref, .raw_deref => |deref| exprContains(deref.expr, target),
+        .from_raw => |value| exprContains(value.expr, target),
         .unary => |unary| exprContains(unary.expr, target),
         .binary => |binary| exprContains(binary.left, target) or exprContains(binary.right, target),
         .call => |call| callArgsContain(call.args, target),
@@ -4636,6 +4638,7 @@ pub const Expr = union(enum) {
     handoff_local: []const u8,
     ref_raw_deref: RawDeref,
     raw_deref: RawDeref,
+    from_raw: FromRaw,
     unary: Unary,
     binary: Binary,
     call: Call,
@@ -4763,6 +4766,7 @@ pub const Expr = union(enum) {
             .handoff_local => {},
             .ref_raw_deref => |deref| deref.expr.destroy(allocator),
             .raw_deref => |deref| deref.expr.destroy(allocator),
+            .from_raw => |value| value.expr.destroy(allocator),
             .unary => |unary| unary.expr.destroy(allocator),
             .binary => |binary| {
                 binary.left.destroy(allocator);
@@ -5220,6 +5224,11 @@ pub const Unary = struct {
 };
 
 pub const RawDeref = struct {
+    expr: *Expr,
+    is_volatile: bool = false,
+};
+
+pub const FromRaw = struct {
     expr: *Expr,
     is_volatile: bool = false,
 };
@@ -5982,6 +5991,10 @@ fn dumpExpr(writer: anytype, module: Module, expr: *const Expr) anyerror!void {
         .raw_deref => |value| {
             try writer.writeAll("*");
             if (value.is_volatile) try writer.writeAll("volatile ");
+            try dumpExpr(writer, module, value.expr);
+        },
+        .from_raw => |value| {
+            try writer.writeAll("from_raw ");
             try dumpExpr(writer, module, value.expr);
         },
         .unary => |unary| {

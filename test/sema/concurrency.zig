@@ -2455,11 +2455,21 @@ test "std shared resource is a transferable boundary" {
             .name_token = zero,
         },
     };
+    var namespace_imports = [_]ast.ImportDecl{.{
+        .path = "std.sync",
+        .local_name = "sync",
+        .items = &.{},
+        .path_token = zero,
+    }};
+    var module_infos = [_]ast.ModuleInfo{.{
+        .name = "",
+        .imports = namespace_imports[0..],
+    }};
     const program = ast.Program{
         .source = "",
         .tokens = &.{},
         .imports = &.{},
-        .module_infos = &.{},
+        .module_infos = module_infos[0..],
         .globals = &.{},
         .asm_consts = &.{},
         .aliases = &.{},
@@ -2518,7 +2528,7 @@ test "non-transferable resource path reports nested payload field" {
             .name_token = zero,
         },
         .{
-            .module_name = "",
+            .module_name = "std.sync",
             .name = "Heap",
             .type_params = &.{},
             .layout = .normal,
@@ -2538,11 +2548,21 @@ test "non-transferable resource path reports nested payload field" {
             .name_token = zero,
         },
     };
+    var namespace_imports = [_]ast.ImportDecl{.{
+        .path = "std.sync",
+        .local_name = "sync",
+        .items = &.{},
+        .path_token = zero,
+    }};
+    var module_infos = [_]ast.ModuleInfo{.{
+        .name = "",
+        .imports = namespace_imports[0..],
+    }};
     const program = ast.Program{
         .source = "",
         .tokens = &.{},
         .imports = &.{},
-        .module_infos = &.{},
+        .module_infos = module_infos[0..],
         .globals = &.{},
         .asm_consts = &.{},
         .aliases = &.{},

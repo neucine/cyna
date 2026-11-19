@@ -56,6 +56,144 @@ test "raw pointer types parse and type-check in declarations" {
     try expectNamedNative("raw_pointer_types", source, 42);
 }
 
+test "leaked owned pointers cross a function boundary and reconstruct for cleanup" {
+    const source =
+        \\struct User {
+        \\    age: i32;
+        \\}
+        \\
+        \\fn make(): *User {
+        \\    var user = new User { age: 42 };
+        \\    return user.leak();
+        \\}
+        \\
+        \\fn release(raw: *User): void {
+        \\    var owner: ^User = resource.from_raw(raw);
+        \\}
+        \\
+        \\fn main(): i32 {
+        \\    const raw = make();
+        \\    var age: i32 = 0;
+        \\    unchecked { age = (*raw).age; }
+        \\    release(raw);
+        \\    return age;
+        \\}
+    ;
+
+    try expectNamedNative("leak_reconstruct_owned_pointer", source, 42);
+}
+
+test "namespace leak and reconstruct release nested owned storage" {
+    const source =
+        \\struct Holder {
+        \\    values: List<i32>;
+        \\}
+        \\
+        \\fn make(): *Holder {
+        \\    var holder = new Holder { values: list_from<i32>([:]i32 [20, 22]) };
+        \\    return resource.leak(holder);
+        \\}
+        \\
+        \\fn release(raw: *Holder): void {
+        \\    var holder: ^Holder = resource.from_raw(raw);
+        \\}
+        \\
+        \\fn main(): i32 {
+        \\    const raw = make();
+        \\    var value: i32 = 0;
+        \\    unchecked { value = (*raw).values[0] + (*raw).values[1]; }
+        \\    release(raw);
+        \\    return value;
+        \\}
+    ;
+
+    try expectNamedNative("resource_leak_reconstruct_nested", source, 42);
+}
+
+test "resource reconstruction requires a non-optional raw pointer" {
+    const non_raw =
+        \\fn reconstruct(value: i32): void {
+        \\    var owner: ^i32 = resource.from_raw(value);
+        \\}
+        \\fn main(): i32 { return 0; }
+    ;
+    try helpers.expectSemanticFailedMessage(
+        std.testing.allocator,
+        "resource_from_raw_non_raw",
+        non_raw,
+        "resource.from_raw expects a non-optional `*T` raw pointer",
+    );
+
+    const optional_raw =
+        \\struct User { age: i32; }
+        \\fn reconstruct(raw: ?*User): void {
+        \\    var owner: ^User = resource.from_raw(raw);
+        \\}
+        \\fn main(): i32 { return 0; }
+    ;
+    try helpers.expectSemanticFailedMessage(
+        std.testing.allocator,
+        "resource_from_raw_optional_raw",
+        optional_raw,
+        "resource.from_raw expects a non-optional `*T` raw pointer",
+    );
+}
+
+test "resource reconstruction rejects callable pointees" {
+    const source =
+        \\fn reconstruct(raw: *fn(): void): void {
+        \\    var owner = resource.from_raw(raw);
+        \\}
+        \\fn main(): i32 { return 0; }
+    ;
+
+    try helpers.expectSemanticFailedMessage(
+        std.testing.allocator,
+        "resource_from_raw_callable",
+        source,
+        "resource.from_raw cannot reconstruct a callable value",
+    );
+}
+
+test "resource reconstruction must initialize an owning local" {
+    const source =
+        \\struct User { age: i32; }
+        \\fn make(): *User {
+        \\    var user = new User { age: 42 };
+        \\    return user.leak();
+        \\}
+        \\fn adopt(raw: *User): ^User {
+        \\    return resource.from_raw(raw);
+        \\}
+        \\fn main(): i32 { return 0; }
+    ;
+
+    try helpers.expectSemanticFailedMessage(
+        std.testing.allocator,
+        "resource_from_raw_non_local",
+        source,
+        "resource.from_raw must directly initialize an owning local",
+    );
+}
+
+test "resource reconstruction consumes the raw binding" {
+    const source =
+        \\struct User { age: i32; }
+        \\fn release(raw: *User): void {
+        \\    var first: ^User = resource.from_raw(raw);
+        \\    var second: ^User = resource.from_raw(raw);
+        \\}
+        \\fn main(): i32 { return 0; }
+    ;
+
+    try helpers.expectSemanticFailedMessage(
+        std.testing.allocator,
+        "resource_from_raw_consumes_raw",
+        source,
+        "local `raw` was handed off or dropped",
+    );
+}
+
 test "volatile raw pointer types parse and type-check in declarations" {
     const source =
         \\struct User {

@@ -1238,6 +1238,7 @@ pub const PureExprAdapter = struct {
                 if (capture.type_id == null or capture.type_id.? != declared) return error.IncorrectResultType;
                 break :blk try self.concreteCarrier(store, expected);
             },
+            .from_raw => try self.types.unknownFact(store, @fromBackingInt(@intCast(@backingInt(expected)))),
             .raw_owned_local, .leak_owned_local => blk: {
                 const source = try self.readBindingFact(expr);
                 const source_type = try self.types.types.get(@fromBackingInt(@intCast(@backingInt(source.type_term))));
@@ -3193,6 +3194,7 @@ pub const StraightLineFlow = struct {
                 };
             },
             .raw_deref, .ref_raw_deref => |deref| try self.consumeHandoffs(values, deref.expr),
+            .from_raw => |value| try self.consumeHandoffs(values, value.expr),
             .take_index_local => |take| try self.consumeHandoffs(values, take.index),
             .take_index_path_local => |take| {
                 for (take.steps) |step| if (step == .index) try self.consumeHandoffs(values, step.index);
@@ -3810,6 +3812,7 @@ pub const PreparedStraightLine = struct {
                 };
             },
             .raw_deref, .ref_raw_deref => |deref| try collectReads(allocator, reads, metadata, names, deref.expr),
+            .from_raw => |value| try collectReads(allocator, reads, metadata, names, value.expr),
             .take_index_local => |take| {
                 try collectTakeBindingRead(allocator, reads, metadata, names, expr, take.local_name);
                 try collectReads(allocator, reads, metadata, names, take.index);
@@ -4979,6 +4982,7 @@ pub const method_use = struct {
                 .sync_share_boxed => |share| try stack.append(allocator, share.payload),
                 .ref_load => |value| try stack.append(allocator, value),
                 .ref_raw_deref, .raw_deref => |deref| try stack.append(allocator, deref.expr),
+                .from_raw => |value| try stack.append(allocator, value.expr),
                 .unary => |unary| try stack.append(allocator, unary.expr),
                 .binary => |binary| {
                     try stack.append(allocator, binary.left);

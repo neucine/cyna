@@ -136,7 +136,9 @@ pub fn lower(self: anytype, expr: *sir.Expr) errors.Error!lir.ValueId {
             const local = try self.getLocal(name);
             try @TypeOf(self.*).recordOwnershipTrace(self, "leak {s}: source cleanup suppressed", .{name});
             self.markCleanupInactive(local);
-            break :blk local.ptr_value;
+            const value = try self.emit(.{ .load = local.ptr_value }, local.ty);
+            const ptr_ty = try self.mb.appendType(.{ .pointer = local.ty });
+            break :blk try self.emit(.{ .heap_alloc = value }, ptr_ty);
         },
         .ref_raw_deref => |raw_expr| try self.lowerExpr(raw_expr.expr),
         .raw_deref => |raw_expr| blk: {
@@ -147,6 +149,15 @@ pub fn lower(self: anytype, expr: *sir.Expr) errors.Error!lir.ValueId {
                 else => return error.LowerInvariantViolation,
             };
             break :blk try self.emit(if (raw_expr.is_volatile) .{ .volatile_load = ptr_value } else .{ .load = ptr_value }, pointee);
+        },
+        .from_raw => |value| blk: {
+            const ptr_value = try self.lowerExpr(value.expr);
+            const ptr_ty = try @TypeOf(self.*).lowerExprType(self, value.expr);
+            const pointee = switch (self.mb.types.items[ptr_ty]) {
+                .pointer => |pointee| pointee,
+                else => return error.LowerInvariantViolation,
+            };
+            break :blk try self.emit(if (value.is_volatile) .{ .volatile_load = ptr_value } else .{ .load = ptr_value }, pointee);
         },
         .ref_field_local => |field| try @TypeOf(self.*).lowerRefFieldLocal(self, field),
         .ref_field_owned_local => |field| try @TypeOf(self.*).lowerRefFieldOwnedLocal(self, field),
@@ -1341,6 +1352,13 @@ pub fn lowerExprType(self: anytype, expr: *sir.Expr) LowerError!lir.TypeId {
         .ref_raw_deref => |raw_expr| try @TypeOf(self.*).lowerExprType(self, raw_expr.expr),
         .raw_deref => |raw_expr| blk: {
             const ptr_ty = try @TypeOf(self.*).lowerExprType(self, raw_expr.expr);
+            break :blk switch (self.mb.types.items[ptr_ty]) {
+                .pointer => |pointee| pointee,
+                else => return error.LowerInvariantViolation,
+            };
+        },
+        .from_raw => |value| blk: {
+            const ptr_ty = try @TypeOf(self.*).lowerExprType(self, value.expr);
             break :blk switch (self.mb.types.items[ptr_ty]) {
                 .pointer => |pointee| pointee,
                 else => return error.LowerInvariantViolation,

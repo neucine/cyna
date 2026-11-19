@@ -1041,6 +1041,15 @@ pub const resolution = struct {
         return null;
     }
 
+    fn isFallbackTypeModule(program: ast.Program, current_module: []const u8, module_name: []const u8) bool {
+        if (isAutoloadModule(program, module_name)) return true;
+        const info = moduleInfo(program, current_module) orelse return false;
+        for (info.imports) |decl| {
+            if (decl.items.len == 0 and std.mem.eql(u8, decl.path, module_name)) return true;
+        }
+        return false;
+    }
+
     pub fn resolveEnumInTypeScope(
         policy: AccessPolicy,
         registry: ?*identity.Registry,
@@ -1072,7 +1081,7 @@ pub const resolution = struct {
                 .{ .inaccessible = resolved };
         }
         for (program.enums) |decl| {
-            if (!enumNameMatchesShort(decl, name)) continue;
+            if (!decl.is_pub or !isFallbackTypeModule(program, current_module, decl.module_name) or !enumNameMatchesShort(decl, name)) continue;
             if (mergeResolved(ResolvedEnumDecl, &found, resolvedEnum(registry, decl))) |ambiguous| return .{ .ambiguous = ambiguous };
         }
         return if (found) |resolved| .{ .found = resolved } else .missing;
@@ -1109,7 +1118,7 @@ pub const resolution = struct {
                 .{ .inaccessible = resolved };
         }
         for (program.unions) |decl| {
-            if (!std.mem.eql(u8, decl.name, name)) continue;
+            if (!decl.is_pub or !isFallbackTypeModule(program, current_module, decl.module_name) or !std.mem.eql(u8, decl.name, name)) continue;
             if (mergeResolved(ResolvedUnionDecl, &found, resolvedUnion(registry, decl))) |ambiguous| return .{ .ambiguous = ambiguous };
         }
         return if (found) |resolved| .{ .found = resolved } else .missing;
@@ -1146,7 +1155,7 @@ pub const resolution = struct {
                 .{ .inaccessible = resolved };
         }
         for (program.structs) |decl| {
-            if (!structNameMatchesShort(decl, name)) continue;
+            if (!decl.is_pub or !isFallbackTypeModule(program, current_module, decl.module_name) or !structNameMatchesShort(decl, name)) continue;
             if (mergeResolved(ResolvedStructDecl, &found, resolvedStruct(registry, decl))) |ambiguous| return .{ .ambiguous = ambiguous };
         }
         return if (found) |resolved| .{ .found = resolved } else .missing;
@@ -1183,7 +1192,7 @@ pub const resolution = struct {
                 .{ .inaccessible = resolved };
         }
         for (program.aliases) |decl| {
-            if (!typeAliasNameMatchesShort(decl, name)) continue;
+            if (!decl.is_pub or !isFallbackTypeModule(program, current_module, decl.module_name) or !typeAliasNameMatchesShort(decl, name)) continue;
             if (mergeResolved(ResolvedTypeAlias, &found, resolvedAlias(registry, decl))) |ambiguous| return .{ .ambiguous = ambiguous };
         }
         return if (found) |resolved| .{ .found = resolved } else .missing;

@@ -153,10 +153,23 @@ pub fn lowerStmt(self: anytype, stmt: sir.Stmt) LowerError!void {
                 try self.defineProjectedLocal(local.name, place.ty, place.ptr_value);
                 return;
             }
-            const slot = try self.defineLocal(local.name, ty);
+            var slot = try self.defineLocal(local.name, ty);
             if ((try self.mb.canonicalTypeNode(local.type_id)).* == .ref_) try self.setLocalReadThroughAlias(local.name, true);
-            const init_v = try @TypeOf(self.*).lowerExprForTarget(self, local.init, ty);
-            try @TypeOf(self.*).captureExprValueInto(self, slot.ptr_value, local.init, init_v, ty);
+            if (local.init.* == .from_raw) {
+                const raw = local.init.from_raw;
+                const raw_ptr = try self.lowerExpr(raw.expr);
+                const raw_ty = try @TypeOf(self.*).lowerExprType(self, raw.expr);
+                switch (self.mb.types.items[raw_ty]) {
+                    .pointer => |pointee| if (pointee != ty) return error.LowerInvariantViolation,
+                    else => return error.LowerInvariantViolation,
+                }
+                const init_v = try self.emit(if (raw.is_volatile) .{ .volatile_load = raw_ptr } else .{ .load = raw_ptr }, ty);
+                try self.emitVoid(.{ .store = .{ .ptr = slot.ptr_value, .value = init_v } });
+                slot = try self.attachHeapCleanup(local.name, slot, raw_ptr);
+            } else {
+                const init_v = try @TypeOf(self.*).lowerExprForTarget(self, local.init, ty);
+                try @TypeOf(self.*).captureExprValueInto(self, slot.ptr_value, local.init, init_v, ty);
+            }
             self.markCleanupActive(slot);
         },
         .assign => |assign| {
@@ -170,7 +183,8 @@ pub fn lowerStmt(self: anytype, stmt: sir.Stmt) LowerError!void {
 
             const slot = try self.getLocal(assign.name);
             const value = try @TypeOf(self.*).lowerExprForTarget(self, assign.value, slot.ty);
-            if (try self.pointerPointee(slot.ty)) |pointee_ty| {
+            if (slot.read_through_alias) {
+                const pointee_ty = try self.pointerPointee(slot.ty) orelse return error.LowerInvariantViolation;
                 const target_ptr = try self.emit(.{ .load = slot.ptr_value }, slot.ty);
                 try @TypeOf(self.*).storeWithCleanup(self, target_ptr, assign.value, value, pointee_ty, false);
             } else {
@@ -619,11 +633,16 @@ pub fn lowerWhileStmt(self: anytype, while_stmt: sir.While) LowerError!void {
 
     self.current_block = cond_blk;
     const cond = try self.lowerExpr(while_stmt.condition);
-    try self.endBlock(.{ .cond_br = .{
-        .condition = cond,
-        .then_block = body_blk,
-        .else_block = exit_blk,
-    } });
+    const always_true = while_stmt.condition.* == .bool and while_stmt.condition.bool;
+    if (always_true) {
+        try self.endBlock(.{ .br = body_blk });
+    } else {
+        try self.endBlock(.{ .cond_br = .{
+            .condition = cond,
+            .then_block = body_blk,
+            .else_block = exit_blk,
+        } });
+    }
 
     self.current_block = body_blk;
     try self.loop_stack.append(self.mb.allocator, .{
@@ -640,6 +659,16 @@ pub fn lowerWhileStmt(self: anytype, while_stmt: sir.While) LowerError!void {
     }
 
     self.current_block = exit_blk;
+    if (always_true) {
+        var has_break = false;
+        for (self.blocks.items) |block| {
+            if (block.terminator == .br and block.terminator.br == exit_blk) {
+                has_break = true;
+                break;
+            }
+        }
+        if (!has_break) try self.endBlock(.{ .@"unreachable" = {} });
+    }
 }
 
 /// Look up the checked record for one hook a `for` loop generates. Lowering

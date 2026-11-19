@@ -919,6 +919,17 @@ test "resource locals auto-drop at function scope exit" {
     try std.testing.expectEqual(@as(i64, 0), exit_code);
 }
 
+test "while true with returns has no reachable exit" {
+    try @import("../helpers.zig").expectNativeSourceExitCode(std.testing.allocator, "while_true_returns.cy",
+        \\fn main(): i32 {
+        \\    while true {
+        \\        if 1 < 2 { return 0; }
+        \\        return 1;
+        \\    }
+        \\}
+    , 0);
+}
+
 test "break exits while and for loops and runs only exited scope defers" {
     try @import("../helpers.zig").expectNativeSourceExitCode(std.testing.allocator, "break_cleanup.cy",
         \\fn add(value: &i32, amount: i32): void { value = value + amount; }
