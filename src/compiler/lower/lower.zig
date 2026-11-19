@@ -1029,6 +1029,7 @@ const FunctionLowerer = struct {
     pub const lowerCastTargetType = expression_lowering.lowerCastTargetType;
     pub const lowerOptionalPayloadCast = expression_lowering.lowerOptionalPayloadCast;
     pub const lowerIntToIntCast = expression_lowering.lowerIntToIntCast;
+    pub const lowerIntToCharCast = expression_lowering.lowerIntToCharCast;
     pub const lowerIntToIntReinterpretCast = expression_lowering.lowerIntToIntReinterpretCast;
     pub const lowerBitcastReinterpretCast = expression_lowering.lowerBitcastReinterpretCast;
     pub const lowerPackedStructToIntCast = expression_lowering.lowerPackedStructToIntCast;

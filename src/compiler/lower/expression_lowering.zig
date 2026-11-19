@@ -521,6 +521,9 @@ pub fn lowerCastExpr(self: anytype, cast: sir.CastExpr) LowerError!lir.ValueId {
             else => error.LowerInvariantViolation,
         };
     }
+    if (target_node.* == .primitive and target_node.primitive == .rune) {
+        return @TypeOf(self.*).lowerIntToCharCast(self, cast);
+    }
     return switch (self.mb.types.items[target_ty]) {
         .float => switch (self.mb.types.items[subject_ty]) {
             .float => try @TypeOf(self.*).lowerFloatToFloatCast(self, cast),
@@ -580,6 +583,33 @@ pub fn lowerIntToIntCast(self: anytype, cast: sir.CastExpr) LowerError!lir.Value
     }
 
     const valid = try @TypeOf(self.*).emitIntFitsType(self, subject, target_ty);
+    return @TypeOf(self.*).finishCheckedCast(self, valid, converted, cast.fallible);
+}
+
+pub fn lowerIntToCharCast(self: anytype, cast: sir.CastExpr) LowerError!lir.ValueId {
+    const subject = try self.lowerExpr(cast.subject);
+    const target_ty = try @TypeOf(self.*).lowerCastTargetType(self, cast);
+    const subject_ty = try @TypeOf(self.*).lowerExprType(self, cast.subject);
+    const converted = if (@TypeOf(self.*).typeIdsEqual(self, subject_ty, target_ty))
+        subject
+    else
+        try self.emit(.{ .int_to_int = subject }, target_ty);
+    const check_ty = self.mb.i64_type;
+    const check_value = if (@TypeOf(self.*).typeIdsEqual(self, subject_ty, check_ty))
+        subject
+    else
+        try self.emit(.{ .int_to_int = subject }, check_ty);
+    const zero = try self.emit(.{ .const_int = 0 }, check_ty);
+    const max_scalar = try self.emit(.{ .const_int = 0x10ffff }, check_ty);
+    const surrogate_start = try self.emit(.{ .const_int = 0xd800 }, check_ty);
+    const surrogate_end = try self.emit(.{ .const_int = 0xdfff }, check_ty);
+    const nonnegative = try self.emit(.{ .int_cmp = .{ .op = .ge, .lhs = check_value, .rhs = zero } }, self.mb.bool_type);
+    const in_range = try self.emit(.{ .int_cmp = .{ .op = .le, .lhs = check_value, .rhs = max_scalar } }, self.mb.bool_type);
+    const below_surrogates = try self.emit(.{ .int_cmp = .{ .op = .lt, .lhs = check_value, .rhs = surrogate_start } }, self.mb.bool_type);
+    const above_surrogates = try self.emit(.{ .int_cmp = .{ .op = .gt, .lhs = check_value, .rhs = surrogate_end } }, self.mb.bool_type);
+    const outside_surrogates = try @TypeOf(self.*).emitBoolOr(self, below_surrogates, above_surrogates);
+    const bounded = try @TypeOf(self.*).emitBoolAnd(self, nonnegative, in_range);
+    const valid = try @TypeOf(self.*).emitBoolAnd(self, bounded, outside_surrogates);
     return @TypeOf(self.*).finishCheckedCast(self, valid, converted, cast.fallible);
 }
 

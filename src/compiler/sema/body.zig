@@ -7064,6 +7064,23 @@ pub fn Owner(comptime host: anytype) type {
                 return SemaError.SemanticFailed;
             }
 
+            if (subject.kind(context) == .int and target_kind == .rune) {
+                out.* = .{ .cast = .{
+                    .subject = subject.expr,
+                    .target_type_id = target,
+                    .union_case_name = null,
+                    .fallible = cast.fallible,
+                    .reinterpret = false,
+                } };
+                const result_ty = if (cast.fallible) try canonicalOptionalTypeId(context, target) else target;
+                return try makeTypedExprWithProvenance(
+                    context,
+                    out,
+                    result_ty,
+                    try propagatedProvenanceForTypeId(context, path, program, current_module, result_ty, subject.provenance),
+                );
+            }
+
             if (subject.kind(context) == .int and target_kind == .int) {
                 out.* = .{ .cast = .{
                     .subject = subject.expr,

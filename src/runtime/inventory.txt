@@ -10,6 +10,7 @@ hosted packages/std/src/std_fs.c
 hosted packages/std/src/std_path.c
 hosted packages/std/src/std_time.c
 hosted packages/std/src/std_math.c
+hosted packages/std/src/std_crypto.c
 hosted packages/std/src/std_process.c
 hosted packages/std/src/std_thread.c
 hosted packages/std/src/std_task_group.c
@@ -18,6 +19,8 @@ header src/runtime/cyna.h
 header src/runtime/failure_trace.h
 header packages/std/src/std_task_group.h
 hosted-symbol cyna_std_task_group_new
+hosted-symbol cyna_std_crypto_sha256_raw
+hosted-symbol cyna_std_crypto_hmac_sha256_raw
 hosted-symbol cyna_std_task_group_bind_trace_context
 hosted-symbol cyna_std_task_group_spawn
 hosted-symbol cyna_std_task_group_spawn_child
