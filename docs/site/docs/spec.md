@@ -2370,10 +2370,9 @@ Semantics for the byte-oriented surface:
 5. prefix/suffix/contains checks operate on byte-equal UTF-8 sequences
 6. these operations are defined by contents, not by string identity
 
-The long-term surface should keep byte-level and text-level operations
-visibly distinct. `bytes()` is the systems/protocol view. A future `chars()`
-view would decode valid UTF-8 into `char` values without failure; it is not
-implemented in the current standard library. A generic string slicing API is
+The long-term surface keeps byte-level and text-level operations visibly
+distinct. `bytes()` is the systems/protocol view. `chars()` iterates Unicode
+scalar `char` values. A generic string slicing API is
 inherently ambiguous
 unless its unit is explicit; APIs should prefer names such as
 `byte_slice(...)` or `char_slice(...)` if both forms are supported.
@@ -2552,6 +2551,8 @@ Required literal rules:
    shaped to that operand's type when the value is representable
 7. runtime casts from `char` to narrower integer types use the ordinary checked
    `as` / `as?` conversion rules
+8. integer-to-`char` `as` / `as?` casts accept only Unicode scalar values;
+   surrogates and values above `U+10FFFF` fail the checked cast
 
 This gives ASCII-heavy systems code concise constants without making text and
 bytes the same type:
@@ -2593,12 +2594,15 @@ for b in bs {
 }
 ```
 
-Unicode-scalar iteration needs a decoder; `string.chars()` is a planned API,
-not a current method. Its intended element type is `char`, a Unicode scalar
+`string.chars()` yields `char`, a Unicode scalar
 value. This is not the same as a
 user-perceived character or grapheme cluster. For example, a base letter plus a
 combining mark is two `char` values, and a flag emoji formed from regional
 indicator symbols is also multiple `char` values.
+The iterator owns a shared string value, so it remains valid when created from
+a temporary string. It decodes UTF-8 without allocating per element. If a
+byte-created string contains malformed UTF-8, each invalid leading byte yields
+`U+FFFD` and iteration advances by one byte.
 
 ### 14.12 Performance Intent
 
@@ -6095,16 +6099,17 @@ Standard-library availability in the current repository:
 | `std.prelude` | Implemented | core targets |
 | `std.alloc` | Implemented, constrained | core targets |
 | `std.testing` | Implemented, constrained | core targets; used by `cyna test` |
-| `std.io` | Implemented, constrained | core targets; writer callback surface |
+| `std.io` | Implemented, constrained | core targets; runtime writer callback plus byte reader/writer protocols and bounded helpers |
 | `std.mem` | Implemented, constrained | core targets; byte-slice utilities |
 | `std.json` | Implemented, constrained | core targets; strict RFC 8259 parse/stringify and ordered value tree |
-| `std.fs` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
+| `std.crypto` | Implemented, initial surface | hosted macOS arm64, Linux x86-64, and Windows x86-64 in the package manifest; native behavior verified on macOS arm64 |
+| `std.fs` | Implemented, constrained | hosted; manifest lists macOS arm64, Linux x86-64, and Windows x86-64; file stream behavior verified on macOS arm64 |
 | `std.path` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.time` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.process` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.thread` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.sync` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
-| `std.string` | Reserved / planned | no shipped module yet |
+| `std.string` | Reserved / planned | no shipped module yet; `string.chars()` is a built-in type method supplied by the prelude |
 | `std.c` | Reserved / planned | no shipped module yet |
 
 “Core” and “hosted” are intended portability classes, not a promise that
