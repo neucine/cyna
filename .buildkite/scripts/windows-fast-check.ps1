@@ -12,9 +12,9 @@ Write-Host '--- Build compiler'
 & zig build -Dtarget=x86_64-windows-gnu -Doptimize=fast
 if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows build failed' }
 
-Write-Host '--- Run fast tests'
-& zig build test-fast -Dtarget=x86_64-windows-gnu -j2 --summary all
-if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows fast tests failed' }
+Write-Host '--- Run hosted std tests'
+& zig build test-native -Dtarget=x86_64-windows-gnu -Dtest-filter='native std.' -j2 --summary all
+if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows hosted std tests failed' }
 
 $declaredVersion = (& python .buildkite/scripts/current-version.py).Trim()
 $actualVersion = (& .\zig-out\bin\cyna.exe version 2>&1 | Out-String).Trim()

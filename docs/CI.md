@@ -28,7 +28,7 @@ The macOS and Linux jobs run `fast-check.sh`. They build the compiler, run the
 repository checks, run `zig build test-fast`, and confirm the compiler version.
 
 The Windows job runs `windows-fast-check.ps1`. It prepares the pinned Windows
-tools, builds the compiler, runs `zig build test-fast`, and confirms the
-compiler version.
+tools, builds the compiler, runs the native hosted `std` tests, and confirms
+the compiler version.
 
 Release branches use the full candidate checks instead of these quick checks.
