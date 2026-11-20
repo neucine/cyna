@@ -13,9 +13,10 @@ On a pull request, add one of these labels:
 - `ci:cross-platform` runs both.
 
 Adding a label starts a Buildkite build for that pull request. The build uses
-the pull request's current commit. The label gate applies to that label event,
-so remove and re-add the label to run the same check again on a later commit.
-Create the labels in the repository first if they are not already available.
+the pull request's current commit. While the label remains on the pull request,
+later builds include the selected platform checks too. Remove the label to
+return future builds to macOS only. Create the labels in the repository first
+if they are not already available.
 
 For a manual Buildkite build, set the `CYNA_FAST_PLATFORMS` environment
 variable to `linux`, `windows`, or `linux,windows`. A plain build without this
