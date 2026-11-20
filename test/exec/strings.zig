@@ -56,6 +56,8 @@ test "native std.fs read_file strings survive map key lookup" {
     defer std.testing.allocator.free(root);
     const input_path = try std.fs.path.join(std.testing.allocator, &.{ root, "input.txt" });
     defer std.testing.allocator.free(input_path);
+    const literal_path = try helpers.cynaPathLiteralAlloc(std.testing.allocator, input_path);
+    defer std.testing.allocator.free(literal_path);
 
     const source = try std.fmt.allocPrint(std.testing.allocator,
         \\import std.fs;
@@ -79,7 +81,7 @@ test "native std.fs read_file strings survive map key lookup" {
         \\    return code;
         \\}}
         \\
-    , .{input_path});
+    , .{literal_path});
     defer std.testing.allocator.free(source);
 
     try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data = source });
@@ -103,6 +105,8 @@ test "native copy string preserves contents for runtime strings" {
     defer std.testing.allocator.free(root);
     const input_path = try std.fs.path.join(std.testing.allocator, &.{ root, "input.txt" });
     defer std.testing.allocator.free(input_path);
+    const literal_path = try helpers.cynaPathLiteralAlloc(std.testing.allocator, input_path);
+    defer std.testing.allocator.free(literal_path);
 
     const source = try std.fmt.allocPrint(std.testing.allocator,
         \\import std.fs;
@@ -125,7 +129,7 @@ test "native copy string preserves contents for runtime strings" {
         \\    return code;
         \\}}
         \\
-    , .{input_path});
+    , .{literal_path});
     defer std.testing.allocator.free(source);
 
     try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data = source });

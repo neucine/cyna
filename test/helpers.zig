@@ -9,6 +9,14 @@ const parser = compiler.parser;
 const sema = compiler.sema;
 pub const test_exec = @import("support.zig");
 
+pub fn cynaPathLiteralAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const normalized = try allocator.dupe(u8, path);
+    for (normalized) |*byte| {
+        if (byte.* == '\\') byte.* = '/';
+    }
+    return normalized;
+}
+
 pub fn expectNativeSourceExitCode(allocator: std.mem.Allocator, path: []const u8, source: []const u8, expected: i64) !void {
     _ = allocator;
     var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
