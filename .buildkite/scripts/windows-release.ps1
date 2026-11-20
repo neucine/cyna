@@ -61,8 +61,15 @@ Write-Host '--- Build binary'
 if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows build failed' }
 & zig cc scripts\buildkite\windows-clang-wrapper.c -O2 -o dist\windows-clang-wrapper.exe
 if ($LASTEXITCODE -ne 0) { throw 'Windows Zig compiler driver build failed' }
-& .\zig-out\bin\cyna.exe version
-if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows executable failed' }
+$versionErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    & .\zig-out\bin\cyna.exe version 2>&1 | Out-Host
+    $versionExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $versionErrorActionPreference
+}
+if ($versionExitCode -ne 0) { throw 'Cyna Windows executable failed' }
 & buildkite-agent artifact upload 'zig-out/bin/cyna.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Could not upload Windows compiler' }
 }
@@ -83,8 +90,15 @@ New-Item -ItemType Directory -Force $installed | Out-Null
 Copy-Item "$stage\*" $installed -Recurse -Force
 $env:HOME = $smokeHome
 $env:PATH = "$(Join-Path $installed 'bin');$(Join-Path $installed 'llvm\bin');$env:PATH"
-& (Join-Path $installed 'bin\cyna.exe') version
-if ($LASTEXITCODE -ne 0) { throw 'Packaged Cyna version check failed' }
+$versionErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    & (Join-Path $installed 'bin\cyna.exe') version 2>&1 | Out-Host
+    $versionExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $versionErrorActionPreference
+}
+if ($versionExitCode -ne 0) { throw 'Packaged Cyna version check failed' }
 $simpleSource = Join-Path (Get-Location) 'dist\windows-smoke-simple.cy'
 $simpleExe = Join-Path (Get-Location) 'dist\windows-smoke-simple.exe'
 Set-Content -Path $simpleSource -Value 'fn main(): i32 { return 42; }' -Encoding Ascii
