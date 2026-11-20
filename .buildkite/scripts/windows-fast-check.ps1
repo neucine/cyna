@@ -6,7 +6,7 @@ Set-Location (Resolve-Path (Join-Path $PSScriptRoot '..\..'))
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'windows-runner-ready.ps1')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$env:PATH = "$(Join-Path (Get-Location) '.tools\zig\0.17.0');$(Join-Path (Get-Location) '.tools\python-shim');$env:PATH"
+$env:PATH = "$(Join-Path (Get-Location) '.tools\llvm\22.1.2\llvm\bin');$(Join-Path (Get-Location) '.tools\zig\0.17.0');$(Join-Path (Get-Location) '.tools\python-shim');$env:PATH"
 
 Write-Host '--- Build compiler'
 & zig build -Dtarget=x86_64-windows-gnu -Doptimize=fast

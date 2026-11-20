@@ -34,6 +34,23 @@ Copy-Item (Get-Command python.exe).Source (Join-Path $shimDir 'python3.exe') -Fo
 $env:PATH = "$shimDir;$env:PATH"
 if ((& python3 --version) -notmatch '^Python 3\.13\.') { throw 'Python 3 shim failed' }
 if ((& zig version) -ne '0.17.0') { throw 'Wrong Zig version' }
+
+$llvmRoot = Join-Path (Get-Location) '.tools\llvm\22.1.2'
+$llvmDir = Join-Path $llvmRoot 'llvm'
+$llvmBin = Join-Path $llvmDir 'bin'
+if (-not (Test-Path (Join-Path $llvmBin 'clang-ir.exe')) -or
+    -not (Test-Path (Join-Path $llvmDir 'zig\lib'))) {
+    if (Test-Path $llvmRoot) { Remove-Item -Recurse -Force $llvmRoot }
+    New-Item -ItemType Directory -Force $llvmRoot | Out-Null
+    Expand-Archive -Path 'dist\windows-inputs\windows-llvm.zip' -DestinationPath $llvmRoot -Force
+    Copy-Item (Join-Path $llvmBin 'clang.exe') (Join-Path $llvmBin 'clang-ir.exe') -Force
+    New-Item -ItemType Directory -Force (Join-Path $llvmDir 'zig') | Out-Null
+    Copy-Item (Join-Path $zigDir 'zig.exe') (Join-Path $llvmDir 'zig\zig.exe') -Force
+    Copy-Item (Join-Path $zigDir 'lib') (Join-Path $llvmDir 'zig\lib') -Recurse -Force
+}
+& zig cc .buildkite\scripts\windows-clang-wrapper.c -O2 -o (Join-Path $llvmBin 'clang.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Windows portable Clang wrapper failed' }
+$env:PATH = "$llvmBin;$env:PATH"
 }
 
 function Invoke-Build {
