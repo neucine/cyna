@@ -17,14 +17,8 @@ Write-Host '--- Run hosted std tests'
 if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows hosted std tests failed' }
 
 $declaredVersion = (& python .buildkite/scripts/current-version.py).Trim()
-$versionErrorActionPreference = $ErrorActionPreference
-try {
-    $ErrorActionPreference = 'Continue'
-    $actualVersion = (& .\zig-out\bin\cyna.exe version 2>&1 | Out-String).Trim()
-    $versionExitCode = $LASTEXITCODE
-} finally {
-    $ErrorActionPreference = $versionErrorActionPreference
-}
+$actualVersion = (& cmd.exe /d /c '.\zig-out\bin\cyna.exe version 2>&1' | Out-String).Trim()
+$versionExitCode = $LASTEXITCODE
 if ($versionExitCode -ne 0) {
     throw "Cyna Windows version command returned $versionExitCode"
 }
