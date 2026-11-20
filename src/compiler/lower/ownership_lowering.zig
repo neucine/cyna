@@ -11,6 +11,7 @@ pub const CleanupEntry = struct {
     ptr_value: lir.ValueId,
     ty: lir.TypeId,
     active: bool,
+    heap_ptr: ?lir.ValueId = null,
 };
 
 pub const State = struct {
@@ -88,6 +89,7 @@ pub fn emitAutoDropsFrom(self: anytype, start: usize, reason: []const u8) LowerE
         try @TypeOf(self.*).recordOwnershipSiteTrace(self, "auto_drop {s} at {s}", .{ cleanup.name, reason });
         const value = try self.emit(.{ .load = cleanup.ptr_value }, cleanup.ty);
         try @TypeOf(self.*).emitDropValue(self, value, cleanup.ty);
+        if (cleanup.heap_ptr) |heap_ptr| try self.emitVoid(.{ .heap_free = heap_ptr });
     }
 }
 

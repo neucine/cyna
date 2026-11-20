@@ -179,6 +179,39 @@ test "projected owned struct fields read through one owner" {
     try expectNamedNative("projected_owned_struct_fields", source, 42);
 }
 
+test "projected union payload reads through one owner" {
+    const source =
+        \\struct Payload { items: [:]i32; }
+        \\union Boxed { payload: Payload; empty; }
+        \\fn main(): i32 {
+        \\    var boxed: Boxed = .payload(Payload { items: [40, 2] });
+        \\    const payload = boxed.payload;
+        \\    const same = payload;
+        \\    const items = same.items;
+        \\    const answer = items[0] + items[1];
+        \\    drop boxed;
+        \\    return answer;
+        \\}
+    ;
+    try expectNamedNative("projected_union_payload", source, 42);
+}
+
+test "narrowed union payload line can be bound directly" {
+    const source =
+        \\struct Payload { items: [:]i32; }
+        \\union Boxed { payload: Payload; empty; }
+        \\fn main(): i32 {
+        \\    var boxed: Boxed = .payload(Payload { items: [40, 2] });
+        \\    if boxed is .payload {
+        \\        const items = boxed.payload.items;
+        \\        return items[0] + items[1];
+        \\    }
+        \\    return 0;
+        \\}
+    ;
+    try expectNamedNative("projected_union_payload_narrowed", source, 42);
+}
+
 test "indexed projected binding captures selected element once" {
     const source =
         \\struct Inner { items: [:]i32; }

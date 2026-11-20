@@ -376,6 +376,265 @@ test "same-named functions in imported modules retain distinct identity" {
     try std.testing.expect(sema.findFunction(module, "main") != null);
 }
 
+test "same-named enum and struct imports keep their declaration kinds" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "cyna.toml",
+        .data =
+        \\name = "cross-kind-imports"
+        \\src = "."
+        \\entry = "main.cy"
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "left.cy",
+        .data =
+        \\pub enum MemoryOrder: i32 {
+        \\    relaxed = 0,
+        \\    acquire,
+        \\}
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "right.cy",
+        .data =
+        \\pub struct MemoryOrder {
+        \\    pub peak_bytes: usize;
+        \\}
+        \\
+        \\pub fn value(): MemoryOrder {
+        \\    return MemoryOrder { peak_bytes: 42 };
+        \\}
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "main.cy",
+        .data =
+        \\import { MemoryOrder as OrderKind } from .left;
+        \\import { MemoryOrder as PeakOrder, value } from .right;
+        \\
+        \\fn main(): usize {
+        \\    const kind = OrderKind.relaxed;
+        \\    if kind == OrderKind.relaxed {
+        \\        const order: PeakOrder = value();
+        \\        return order.peak_bytes;
+        \\    }
+        \\    return 0;
+        \\}
+        \\
+        ,
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, source_path, loaded.program);
+    defer module.deinit(std.testing.allocator);
+
+    const lowered = try lower.lowerModule(std.testing.allocator, module);
+    defer lowered.deinit(std.testing.allocator);
+}
+
+test "transitive module types are not visible without an import" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "cyna.toml",
+        .data =
+        \\name = "transitive-type-visibility"
+        \\src = "."
+        \\entry = "main.cy"
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "model.cy",
+        .data =
+        \\pub struct Region {
+        \\    pub start: usize;
+        \\}
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "bridge.cy",
+        .data =
+        \\import .model;
+        \\
+        \\pub fn start(region: model.Region): usize {
+        \\    return region.start;
+        \\}
+        \\
+        ,
+    });
+    try compat.dirWriteFile(tmp.dir, .{
+        .sub_path = "main.cy",
+        .data =
+        \\import .bridge;
+        \\
+        \\fn read(region: Region): usize {
+        \\    return region.start;
+        \\}
+        \\
+        \\fn main(): i32 {
+        \\    return 0;
+        \\}
+        \\
+        ,
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    try std.testing.expectError(error.SemanticFailed, sema.buildSir(std.testing.allocator, source_path, loaded.program));
+}
+
+test "imported function signatures resolve in their declaration module" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "cyna.toml", .data =
+        \\name = "function-signature-context"
+        \\src = "."
+        \\entry = "main.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "model.cy", .data =
+        \\pub struct Choice {
+        \\    pub value: usize;
+        \\}
+        \\
+        \\pub fn make(): Choice {
+        \\    return Choice { value: 7 };
+        \\}
+        \\
+        \\pub fn read(choice: &const Choice): usize {
+        \\    return choice.value;
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "consumer.cy", .data =
+        \\import { make, read } from .model;
+        \\
+        \\pub fn run(): usize {
+        \\    const choice = make();
+        \\    return read(&choice);
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data =
+        \\import { run } from .consumer;
+        \\fn main(): usize { return run(); }
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, source_path, loaded.program);
+    defer module.deinit(std.testing.allocator);
+}
+
+test "explicit generic method arguments resolve in the caller module" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "cyna.toml", .data =
+        \\name = "generic-method-caller-context"
+        \\src = "."
+        \\entry = "main.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "model.cy", .data =
+        \\pub struct Box {
+        \\    pub value: usize;
+        \\
+        \\    pub fn pass<U>(self: Box, value: U): U {
+        \\        return value;
+        \\    }
+        \\}
+        \\
+        \\pub fn make(): Box {
+        \\    return Box { value: 7 };
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "consumer.cy", .data =
+        \\import { make } from .model;
+        \\
+        \\struct Secret {
+        \\    pub value: usize;
+        \\}
+        \\
+        \\pub fn run(secret: Secret): Secret {
+        \\    const box = make();
+        \\    return box.pass<Secret>(secret);
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data =
+        \\import { run } from .consumer;
+        \\
+        \\fn main(): i32 {
+        \\    return 0;
+        \\}
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, source_path, loaded.program);
+    defer module.deinit(std.testing.allocator);
+}
+
+test "imported union payloads resolve in their declaration module" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "cyna.toml", .data =
+        \\name = "union-payload-context"
+        \\src = "."
+        \\entry = "main.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "model.cy", .data =
+        \\pub struct Payload {
+        \\    pub value: usize;
+        \\}
+        \\
+        \\pub union Choice {
+        \\    value: Payload;
+        \\}
+        \\
+        \\pub fn make(): Choice {
+        \\    return .value(Payload { value: 7 });
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "consumer.cy", .data =
+        \\import { make } from .model;
+        \\
+        \\pub fn run(): usize {
+        \\    const choice = make();
+        \\    switch choice {
+        \\        .value(payload) => { return payload.value; }
+        \\    }
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data =
+        \\import { run } from .consumer;
+        \\fn main(): usize { return run(); }
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, source_path, loaded.program);
+    defer module.deinit(std.testing.allocator);
+}
+
 test "same-named nominal types in imported modules lower by identity" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

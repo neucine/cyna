@@ -600,7 +600,8 @@ fn ensureCachedNativeExecutablePath(
     defer allocator.free(relative_exe_dir);
     const exe_dir = try std.fs.path.join(allocator, &.{ cache_root, relative_exe_dir });
     defer allocator.free(exe_dir);
-    const exe_path = try std.fs.path.join(allocator, &.{ exe_dir, "test.native" });
+    const exe_name = if (@import("builtin").os.tag == .windows) "test.native.exe" else "test.native";
+    const exe_path = try std.fs.path.join(allocator, &.{ exe_dir, exe_name });
     errdefer allocator.free(exe_path);
 
     native_executable_cache_mutex.lockUncancelable(compat.io());

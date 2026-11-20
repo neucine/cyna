@@ -345,6 +345,11 @@ pub fn FunctionContext(comptime LocalBinding: type) type {
         expected_return_token: ?lexer.Token = null,
         expected_return_path: ?[]const u8 = null,
         expected_type_origin: ?TypeExpectationOrigin = null,
+        /// `resource.from_raw` reconstructs both the pointee value and the
+        /// allocation that owns it. The current lowering attaches that
+        /// allocation to the initializing local, so reconstruction is only
+        /// admitted as a direct owning-local initializer.
+        resource_from_raw_initializer: bool = false,
         /// Set while lowering a function expression whose return type is a
         /// placeholder: every lowered `return` joins the shape it yields, so the
         /// call site reads the join the body produced rather than a syntax walk.

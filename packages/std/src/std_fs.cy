@@ -1,3 +1,5 @@
+import std.io;
+
 pub enum FsError: i32 {
     not_found = 0,
     permission_denied,
@@ -17,6 +19,70 @@ pub struct DirEntry {
     pub kind: DirEntryKind;
 }
 
+@ownership.owned
+pub c struct File {
+    raw: c_size_t;
+
+    // Closing consumes this handle, including when the final flush fails.
+    pub fn close(self: File): void ! FsError {
+        try file_close_raw(self.raw);
+        return;
+    }
+}
+
+impl File: io.Reader {
+    fn read(self: &File, dest: []u8): usize ! io.IoError {
+        return try file_read_raw(self.raw, dest);
+    }
+}
+
+impl File: io.Writer {
+    fn write(self: &File, data: []const u8): usize ! io.IoError {
+        return try file_write_raw(self.raw, data);
+    }
+}
+
+// Process-owned streams. These are borrowed handles and have no close method.
+pub struct Stdin {
+    raw: c_size_t;
+}
+
+pub struct Stdout {
+    raw: c_size_t;
+
+    pub fn flush(self: &Stdout): void ! io.IoError {
+        try file_flush_raw(self.raw);
+        return;
+    }
+}
+
+pub struct Stderr {
+    raw: c_size_t;
+
+    pub fn flush(self: &Stderr): void ! io.IoError {
+        try file_flush_raw(self.raw);
+        return;
+    }
+}
+
+impl Stdin: io.Reader {
+    fn read(self: &Stdin, dest: []u8): usize ! io.IoError {
+        return try file_read_raw(self.raw, dest);
+    }
+}
+
+impl Stdout: io.Writer {
+    fn write(self: &Stdout, data: []const u8): usize ! io.IoError {
+        return try file_write_raw(self.raw, data);
+    }
+}
+
+impl Stderr: io.Writer {
+    fn write(self: &Stderr, data: []const u8): usize ! io.IoError {
+        return try file_write_raw(self.raw, data);
+    }
+}
+
 struct RawDirEntry {
     name: string;
     kind: DirEntryKind;
@@ -27,7 +93,49 @@ pub extern c fn read_bytes(path: string): [:]u8 ! FsError;
 pub extern c fn exists(path: string): bool ! FsError;
 pub extern c fn create_dir(path: string): void ! FsError;
 
+pub fn open_read(path: string): File ! FsError {
+    const raw = try file_open_read_raw(path);
+    return File {
+        raw: raw
+    };
+}
+
+// Creates or truncates a file. Call close to report any final flush failure.
+pub fn open_write(path: string): File ! FsError {
+    const raw = try file_open_write_raw(path);
+    return File {
+        raw: raw
+    };
+}
+
+pub fn stdin(): Stdin {
+    return Stdin {
+        raw: file_stdin_raw()
+    };
+}
+
+pub fn stdout(): Stdout {
+    return Stdout {
+        raw: file_stdout_raw()
+    };
+}
+
+pub fn stderr(): Stderr {
+    return Stderr {
+        raw: file_stderr_raw()
+    };
+}
+
 extern {
+    c fn file_open_read_raw(path: string): c_size_t ! FsError;
+    c fn file_open_write_raw(path: string): c_size_t ! FsError;
+    c fn file_read_raw(handle: c_size_t, dest: []u8): usize ! io.IoError;
+    c fn file_write_raw(handle: c_size_t, data: []const u8): usize ! io.IoError;
+    c fn file_close_raw(handle: c_size_t): void ! FsError;
+    c fn file_flush_raw(handle: c_size_t): void ! io.IoError;
+    c fn file_stdin_raw(): c_size_t;
+    c fn file_stdout_raw(): c_size_t;
+    c fn file_stderr_raw(): c_size_t;
     c fn write_bytes_raw(path: string, data: []const u8): void ! FsError;
     c fn open_dir(path: string): c_size_t ! FsError;
     c fn read_dir_next(handle: c_size_t): ?RawDirEntry ! FsError;

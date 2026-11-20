@@ -1,9 +1,13 @@
+#ifndef _WIN32
+#define _DEFAULT_SOURCE 1
+#endif
 #include "../../../src/runtime/cyna.h"
 #ifndef _WIN32
 #include <dirent.h>
 #include <unistd.h>
 #else
 #include <direct.h>
+#include <fcntl.h>
 #include <io.h>
 #endif
 #include <errno.h>
@@ -54,6 +58,18 @@ typedef struct {
     size_t ok;
     int32_t err;
 } CynaResultHandleFsError;
+
+typedef struct {
+    uint8_t is_ok;
+    size_t ok;
+    int32_t err;
+} CynaResultSizeIoError;
+
+typedef struct {
+    uint8_t is_ok;
+    uint8_t ok;
+    int32_t err;
+} CynaResultVoidIoError;
 
 typedef struct {
     uint8_t is_ok;
@@ -220,6 +236,106 @@ static CynaResultHandleFsError cyna_std_fs_result_handle_err(CynaFsError err) {
     out.ok = 0;
     out.err = (int32_t)err;
     return out;
+}
+
+static CynaResultSizeIoError cyna_std_fs_result_size_io_ok(size_t value) {
+    CynaResultSizeIoError out;
+    out.is_ok = 0;
+    out.ok = value;
+    out.err = 0;
+    return out;
+}
+
+static CynaResultSizeIoError cyna_std_fs_result_size_io_err(int32_t error) {
+    CynaResultSizeIoError out;
+    out.is_ok = 1;
+    out.ok = 0;
+    out.err = error;
+    return out;
+}
+
+static CynaResultVoidIoError cyna_std_fs_result_void_io(int failed) {
+    CynaResultVoidIoError out;
+    out.is_ok = (uint8_t)(failed != 0);
+    out.ok = 0;
+    out.err = failed != 0 ? 1 : 0; // IoError.write_failed
+    return out;
+}
+
+size_t cyna_std_fs_file_stdin_raw(void) { return (size_t)(uintptr_t)stdin; }
+size_t cyna_std_fs_file_stdout_raw(void) { return (size_t)(uintptr_t)stdout; }
+size_t cyna_std_fs_file_stderr_raw(void) { return (size_t)(uintptr_t)stderr; }
+
+static int cyna_std_fs_prepare_binary_stream(FILE *file) {
+#ifdef _WIN32
+    if (file == stdin || file == stdout || file == stderr) {
+        return _setmode(_fileno(file), _O_BINARY) != -1;
+    }
+#else
+    (void)file;
+#endif
+    return 1;
+}
+
+static CynaResultHandleFsError cyna_std_fs_file_open(CynaString path, const char *mode) {
+    const int64_t length = cyna_string_logical_len(path);
+    if (length != 0 && memchr(path.ptr, 0, (size_t)length) != NULL) {
+        cyna_string_release(path);
+        return cyna_std_fs_result_handle_err(CYNA_FS_INVALID_PATH);
+    }
+    char *path_buf = cyna_path_buf(path);
+    cyna_string_release(path);
+    if (path_buf == NULL) return cyna_std_fs_result_handle_err(CYNA_FS_IO_ERROR);
+    FILE *file = fopen(path_buf, mode);
+    const int saved_errno = errno;
+    cyna_runtime_tracked_free(path_buf);
+    if (file == NULL) return cyna_std_fs_result_handle_err(cyna_map_fs_errno(saved_errno));
+    return cyna_std_fs_result_handle_ok((size_t)(uintptr_t)file);
+}
+
+CynaResultHandleFsError cyna_std_fs_file_open_read_raw(CynaString path) {
+    return cyna_std_fs_file_open(path, "rb");
+}
+
+CynaResultHandleFsError cyna_std_fs_file_open_write_raw(CynaString path) {
+    return cyna_std_fs_file_open(path, "wb");
+}
+
+CynaResultSizeIoError cyna_std_fs_file_read_raw(size_t handle, CynaBytes dest) {
+    FILE *file = (FILE *)(uintptr_t)handle;
+    if (file == NULL || dest.len < 0 || (dest.len != 0 && dest.ptr == NULL)) {
+        return cyna_std_fs_result_size_io_err(3); // IoError.invalid_count
+    }
+    if (!cyna_std_fs_prepare_binary_stream(file)) return cyna_std_fs_result_size_io_err(0);
+    if (dest.len == 0) return cyna_std_fs_result_size_io_ok(0);
+    const size_t count = fread(dest.ptr, 1, (size_t)dest.len, file);
+    if (count == 0 && ferror(file)) return cyna_std_fs_result_size_io_err(0); // IoError.read_failed
+    return cyna_std_fs_result_size_io_ok(count);
+}
+
+CynaResultSizeIoError cyna_std_fs_file_write_raw(size_t handle, CynaBytes data) {
+    FILE *file = (FILE *)(uintptr_t)handle;
+    if (file == NULL || data.len < 0 || (data.len != 0 && data.ptr == NULL)) {
+        return cyna_std_fs_result_size_io_err(3); // IoError.invalid_count
+    }
+    if (!cyna_std_fs_prepare_binary_stream(file)) return cyna_std_fs_result_size_io_err(1);
+    if (data.len == 0) return cyna_std_fs_result_size_io_ok(0);
+    const size_t count = fwrite(data.ptr, 1, (size_t)data.len, file);
+    if (count == 0 && ferror(file)) return cyna_std_fs_result_size_io_err(1); // IoError.write_failed
+    return cyna_std_fs_result_size_io_ok(count);
+}
+
+CynaResultVoidIoError cyna_std_fs_file_flush_raw(size_t handle) {
+    FILE *file = (FILE *)(uintptr_t)handle;
+    if (file == NULL) return cyna_std_fs_result_void_io(1);
+    return cyna_std_fs_result_void_io(fflush(file));
+}
+
+CynaResultVoidFsError cyna_std_fs_file_close_raw(size_t handle) {
+    FILE *file = (FILE *)(uintptr_t)handle;
+    if (file == NULL) return cyna_std_fs_result_void_err(CYNA_FS_IO_ERROR);
+    if (fclose(file) != 0) return cyna_std_fs_result_void_err(CYNA_FS_IO_ERROR);
+    return cyna_std_fs_result_void_ok();
 }
 
 static CynaResultOptionalRawDirEntryFsError cyna_std_fs_result_optional_raw_dir_entry_ok(CynaOptionalRawDirEntry value) {

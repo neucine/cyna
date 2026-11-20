@@ -23,6 +23,127 @@ impl string: Clone {
     }
 }
 
+pub struct Chars {
+    text: string;
+
+    @syntax.iter
+    pub fn iter(self: &const Chars): CharsIter {
+        return CharsIter {
+            index: 0
+        };
+    }
+
+    @syntax.iter_has_next
+    pub fn iter_has_next(self: &const Chars, state: &const CharsIter): bool {
+        return state.index < self.text.len();
+    }
+
+    @syntax.iter_next
+    pub fn iter_next(self: &const Chars, state: &CharsIter): usize {
+        const cursor = state.index;
+        const decoded = decode_char_at(self.text, cursor);
+        state.index = state.index + decoded.width;
+        return cursor;
+    }
+
+    @syntax.iter_item
+    pub fn iter_item(self: &const Chars, cursor: usize): char {
+        return decode_char_at(self.text, cursor).value;
+    }
+}
+
+pub struct CharsIter {
+    index: usize;
+}
+
+struct DecodedChar {
+    value: char;
+    width: usize;
+}
+
+fn continuation_byte(value: u8): bool {
+    return (value & 0xc0) == 0x80;
+}
+
+fn decode_char_at(text: string, index: usize): DecodedChar {
+    const bytes = text.bytes();
+    const first = bytes[index];
+    if first < 0x80 {
+        return {
+            value: (first as u32) as char,
+            width: 1
+        };
+    }
+
+    var width: usize = 0;
+    var scalar: u32 = 0;
+    if first >= 0xc2 and first <= 0xdf {
+        width = 2;
+        scalar = (first & 0x1f) as u32;
+    } else if first >= 0xe0 and first <= 0xef {
+        width = 3;
+        scalar = (first & 0x0f) as u32;
+    } else if first >= 0xf0 and first <= 0xf4 {
+        width = 4;
+        scalar = (first & 0x07) as u32;
+    } else {
+        return {
+            value: '\u{FFFD}',
+            width: 1
+        };
+    }
+
+    if index + width > bytes.len() {
+        return {
+            value: '\u{FFFD}',
+            width: 1
+        };
+    }
+    var offset: usize = 1;
+    while offset < width {
+        const next = bytes[index + offset];
+        if not continuation_byte(next) {
+            return {
+                value: '\u{FFFD}',
+                width: 1
+            };
+        }
+        scalar = (scalar << 6) | ((next & 0x3f) as u32);
+        offset = offset + 1;
+    }
+
+    if (width == 2 and scalar < 0x80) or
+    (width == 3 and scalar < 0x800) or
+    (width == 4 and scalar < 0x10000) {
+        return {
+            value: '\u{FFFD}',
+            width: 1
+        };
+    }
+    if scalar as? char is result {
+        return {
+            value: result,
+            width: width
+        };
+    }
+    return {
+        value: '\u{FFFD}',
+        width: 1
+    };
+}
+
+protocol CharSequence {
+    fn chars(self: Self): Chars;
+}
+
+impl string: CharSequence {
+    fn chars(self: string): Chars {
+        return Chars {
+            text: self
+        };
+    }
+}
+
 impl i8: Clone {
     fn clone(self: &const i8): i8 {
         return self;

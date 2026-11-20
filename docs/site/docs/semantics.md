@@ -1061,11 +1061,30 @@ context is handoff-shaped
 A narrow declaration rule admits `const field = owner.owned_field` when
 `owner` is a live owning local of an ordinary unpacked struct. The resulting
 binding has projected mode and a checked owner-field path. Transitive
-`const same = field` and eligible nested field bindings retain that path.
+`const same = field` and eligible nested field bindings retain that path. The
+same rule admits an owned checked payload of a named union:
+
+```cyna
+const payload = boxed.payload;
+const items = payload.items;
+```
+
+Inside a narrowed union branch it may cross the payload and continue through
+stable ordinary storage:
+
+```cyna
+if boxed is .payload {
+    const items = boxed.payload.items;
+    return items[0];
+}
+```
+
 Its read is a borrowed projection; it carries no cleanup or ownership handoff.
 Overlapping mutation, detach, replacement, or owner movement is rejected while
 the binding is live. Owned sinks still reject it. This rule does not apply to
-indexed places, checked payloads, temporary roots, packed fields, or `var`.
+`c union` fields, optional or switch capture bindings, temporary roots, packed
+fields, or `var`. Indexed owned storage follows the admission cases described
+above. Captured payload bindings keep their existing owning-mode behavior.
 
 Outside this declaration rule, plain projected owned value access does not
 become an implicit borrow.
@@ -1904,10 +1923,11 @@ The most important current findings are:
 
 - projected owned value reads in handoff positions remain rejected. A narrow
   declaration exception admits `const field = owner.owned_field` for a stable
-  owned field of an ordinary struct under a live owning local. That binding is
-  non-owning and read-only. Indexed examples such as `const a = xs[i].f.g`,
-  returns, assignments, and owned-value call arguments still require an
-  explicit `.clone()`, `take`, `&`, or `[..]` where applicable.
+  owned field of an ordinary struct or a checked payload of a named union
+  under a live owning local. That binding is non-owning and read-only. Indexed
+  examples such as `const a = xs[i].f.g`, returns, assignments, and
+  owned-value call arguments still require an explicit `.clone()`, `take`,
+  `&`, or `[..]` where applicable.
 
 - this projected-owned-value rejection is not only a surface-checker policy.
   The restricted struct-field binding uses an owner-field pointer with no

@@ -4,6 +4,38 @@ const compat = @import("cyna").compat;
 const helpers = @import("../helpers.zig");
 const test_exec = @import("../support.zig");
 
+test "native string chars decodes Unicode scalars and retains temporary text" {
+    const source =
+        \\fn main(): i32 {
+        \\    var count: i32 = 0;
+        \\    for ch in string.from("A中😀é".bytes()).chars() {
+        \\        if count == 0 and ch != 'A' { return 1; }
+        \\        if count == 1 and ch != '中' { return 2; }
+        \\        if count == 2 and ch != '😀' { return 3; }
+        \\        if count == 3 and ch != 'e' { return 4; }
+        \\        if count == 4 and ch != '\u{0301}' { return 5; }
+        \\        count = count + 1;
+        \\    }
+        \\    if count != 5 { return 6; }
+        \\    for ignored in "".chars() { return 7; }
+        \\    const raw: [4]u8 = [0xff, 0xc0, 0x80, 0x41];
+        \\    var replacements: i32 = 0;
+        \\    for ch in string.from(raw[..]).chars() {
+        \\        if replacements < 3 and ch != '\u{FFFD}' { return 11; }
+        \\        if replacements == 3 and ch != 'A' { return 12; }
+        \\        replacements = replacements + 1;
+        \\    }
+        \\    if replacements != 4 { return 13; }
+        \\    if (0x10ffff as? char) is none { return 8; }
+        \\    if (0xd800 as? char) is value { return 9; }
+        \\    if (0x110000 as? char) is value { return 10; }
+        \\    return 42;
+        \\}
+        \\
+    ;
+    try helpers.expectNativeSourceExitCode(std.testing.allocator, "native_string_chars.cy", source, 42);
+}
+
 fn runNativeFileExitCodeFast(path: []const u8) !i64 {
     var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer scratch.deinit();
@@ -24,6 +56,8 @@ test "native std.fs read_file strings survive map key lookup" {
     defer std.testing.allocator.free(root);
     const input_path = try std.fs.path.join(std.testing.allocator, &.{ root, "input.txt" });
     defer std.testing.allocator.free(input_path);
+    const literal_path = try helpers.cynaPathLiteralAlloc(std.testing.allocator, input_path);
+    defer std.testing.allocator.free(literal_path);
 
     const source = try std.fmt.allocPrint(std.testing.allocator,
         \\import std.fs;
@@ -47,7 +81,7 @@ test "native std.fs read_file strings survive map key lookup" {
         \\    return code;
         \\}}
         \\
-    , .{input_path});
+    , .{literal_path});
     defer std.testing.allocator.free(source);
 
     try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data = source });
@@ -71,6 +105,8 @@ test "native copy string preserves contents for runtime strings" {
     defer std.testing.allocator.free(root);
     const input_path = try std.fs.path.join(std.testing.allocator, &.{ root, "input.txt" });
     defer std.testing.allocator.free(input_path);
+    const literal_path = try helpers.cynaPathLiteralAlloc(std.testing.allocator, input_path);
+    defer std.testing.allocator.free(literal_path);
 
     const source = try std.fmt.allocPrint(std.testing.allocator,
         \\import std.fs;
@@ -93,7 +129,7 @@ test "native copy string preserves contents for runtime strings" {
         \\    return code;
         \\}}
         \\
-    , .{input_path});
+    , .{literal_path});
     defer std.testing.allocator.free(source);
 
     try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data = source });

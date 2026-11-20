@@ -171,6 +171,9 @@ pub const Module = struct {
             .type_desc, .stack_alloc => |ty| {
                 if (!self.hasType(ty)) return error.InvalidTypeReference;
             },
+            .heap_alloc,
+            .heap_free,
+            => |value| try verifyValueRef(value_types, value),
             .field_ptr => |value| try verifyValueRef(value_types, value.ptr),
             .index_ptr => |value| {
                 try verifyValueRef(value_types, value.ptr);
@@ -751,6 +754,8 @@ pub const InstData = union(enum) {
     global_addr: []const u8,
 
     stack_alloc: TypeId,
+    heap_alloc: ValueId,
+    heap_free: ValueId,
     field_ptr: FieldPtr,
     index_ptr: IndexPtr,
     union_payload_ptr: UnionPayloadPtr,
@@ -864,6 +869,8 @@ pub const InstData = union(enum) {
                 try writer.writeAll("stack_alloc ");
                 try dumpType(writer, module, ty);
             },
+            .heap_alloc => |value| try writer.print("heap_alloc %{}", .{value}),
+            .heap_free => |value| try writer.print("heap_free %{}", .{value}),
             .field_ptr => |field| try writer.print("field_ptr %{} .{}", .{ field.ptr, field.field_index }),
             .index_ptr => |index| try writer.print("index_ptr %{}[%{}]", .{ index.ptr, index.index }),
             .union_payload_ptr => |payload| try writer.print("union_payload_ptr %{} case={}", .{ payload.ptr, payload.union_tag }),

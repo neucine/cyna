@@ -512,6 +512,34 @@ test "LIR does not auto-drop leaked owned pointers" {
     try std.testing.expect(std.mem.indexOf(u8, text, "auto_drop user at scope_exit (") == null);
 }
 
+test "LIR reconstructs leaked nested resources and frees the outer allocation last" {
+    const source =
+        \\struct Holder {
+        \\    values: List<i32>;
+        \\}
+        \\
+        \\fn make(): *Holder {
+        \\    var holder = new Holder { values: list_from<i32>([:]i32 [20, 22]) };
+        \\    return resource.leak(holder);
+        \\}
+        \\
+        \\fn release(raw: *Holder): void {
+        \\    var holder: ^Holder = resource.from_raw(raw);
+        \\}
+        \\
+        \\fn main(): i32 { return 0; }
+    ;
+
+    const text = try lir_support.lowerLirText(std.testing.allocator, "lir_resource_leak_reconstruct_nested.cy", source);
+    defer std.testing.allocator.free(text);
+
+    try std.testing.expect(std.mem.indexOf(u8, text, "heap_alloc") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "auto_drop holder at scope_exit") != null);
+    const nested_drop_at = std.mem.lastIndexOf(u8, text, "dense_drop") orelse return error.TestUnexpectedResult;
+    const outer_free_at = std.mem.lastIndexOf(u8, text, "heap_free") orelse return error.TestUnexpectedResult;
+    try std.testing.expect(nested_drop_at < outer_free_at);
+}
+
 test "LIR does not auto-drop handed off union-containing struct return values" {
     const source =
         \\struct User {

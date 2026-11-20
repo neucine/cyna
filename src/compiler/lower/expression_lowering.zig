@@ -136,7 +136,9 @@ pub fn lower(self: anytype, expr: *sir.Expr) errors.Error!lir.ValueId {
             const local = try self.getLocal(name);
             try @TypeOf(self.*).recordOwnershipTrace(self, "leak {s}: source cleanup suppressed", .{name});
             self.markCleanupInactive(local);
-            break :blk local.ptr_value;
+            const value = try self.emit(.{ .load = local.ptr_value }, local.ty);
+            const ptr_ty = try self.mb.appendType(.{ .pointer = local.ty });
+            break :blk try self.emit(.{ .heap_alloc = value }, ptr_ty);
         },
         .ref_raw_deref => |raw_expr| try self.lowerExpr(raw_expr.expr),
         .raw_deref => |raw_expr| blk: {
@@ -147,6 +149,15 @@ pub fn lower(self: anytype, expr: *sir.Expr) errors.Error!lir.ValueId {
                 else => return error.LowerInvariantViolation,
             };
             break :blk try self.emit(if (raw_expr.is_volatile) .{ .volatile_load = ptr_value } else .{ .load = ptr_value }, pointee);
+        },
+        .from_raw => |value| blk: {
+            const ptr_value = try self.lowerExpr(value.expr);
+            const ptr_ty = try @TypeOf(self.*).lowerExprType(self, value.expr);
+            const pointee = switch (self.mb.types.items[ptr_ty]) {
+                .pointer => |pointee| pointee,
+                else => return error.LowerInvariantViolation,
+            };
+            break :blk try self.emit(if (value.is_volatile) .{ .volatile_load = ptr_value } else .{ .load = ptr_value }, pointee);
         },
         .ref_field_local => |field| try @TypeOf(self.*).lowerRefFieldLocal(self, field),
         .ref_field_owned_local => |field| try @TypeOf(self.*).lowerRefFieldOwnedLocal(self, field),
@@ -510,6 +521,9 @@ pub fn lowerCastExpr(self: anytype, cast: sir.CastExpr) LowerError!lir.ValueId {
             else => error.LowerInvariantViolation,
         };
     }
+    if (target_node.* == .primitive and target_node.primitive == .rune) {
+        return @TypeOf(self.*).lowerIntToCharCast(self, cast);
+    }
     return switch (self.mb.types.items[target_ty]) {
         .float => switch (self.mb.types.items[subject_ty]) {
             .float => try @TypeOf(self.*).lowerFloatToFloatCast(self, cast),
@@ -569,6 +583,33 @@ pub fn lowerIntToIntCast(self: anytype, cast: sir.CastExpr) LowerError!lir.Value
     }
 
     const valid = try @TypeOf(self.*).emitIntFitsType(self, subject, target_ty);
+    return @TypeOf(self.*).finishCheckedCast(self, valid, converted, cast.fallible);
+}
+
+pub fn lowerIntToCharCast(self: anytype, cast: sir.CastExpr) LowerError!lir.ValueId {
+    const subject = try self.lowerExpr(cast.subject);
+    const target_ty = try @TypeOf(self.*).lowerCastTargetType(self, cast);
+    const subject_ty = try @TypeOf(self.*).lowerExprType(self, cast.subject);
+    const converted = if (@TypeOf(self.*).typeIdsEqual(self, subject_ty, target_ty))
+        subject
+    else
+        try self.emit(.{ .int_to_int = subject }, target_ty);
+    const check_ty = self.mb.i64_type;
+    const check_value = if (@TypeOf(self.*).typeIdsEqual(self, subject_ty, check_ty))
+        subject
+    else
+        try self.emit(.{ .int_to_int = subject }, check_ty);
+    const zero = try self.emit(.{ .const_int = 0 }, check_ty);
+    const max_scalar = try self.emit(.{ .const_int = 0x10ffff }, check_ty);
+    const surrogate_start = try self.emit(.{ .const_int = 0xd800 }, check_ty);
+    const surrogate_end = try self.emit(.{ .const_int = 0xdfff }, check_ty);
+    const nonnegative = try self.emit(.{ .int_cmp = .{ .op = .ge, .lhs = check_value, .rhs = zero } }, self.mb.bool_type);
+    const in_range = try self.emit(.{ .int_cmp = .{ .op = .le, .lhs = check_value, .rhs = max_scalar } }, self.mb.bool_type);
+    const below_surrogates = try self.emit(.{ .int_cmp = .{ .op = .lt, .lhs = check_value, .rhs = surrogate_start } }, self.mb.bool_type);
+    const above_surrogates = try self.emit(.{ .int_cmp = .{ .op = .gt, .lhs = check_value, .rhs = surrogate_end } }, self.mb.bool_type);
+    const outside_surrogates = try @TypeOf(self.*).emitBoolOr(self, below_surrogates, above_surrogates);
+    const bounded = try @TypeOf(self.*).emitBoolAnd(self, nonnegative, in_range);
+    const valid = try @TypeOf(self.*).emitBoolAnd(self, bounded, outside_surrogates);
     return @TypeOf(self.*).finishCheckedCast(self, valid, converted, cast.fallible);
 }
 
@@ -1341,6 +1382,13 @@ pub fn lowerExprType(self: anytype, expr: *sir.Expr) LowerError!lir.TypeId {
         .ref_raw_deref => |raw_expr| try @TypeOf(self.*).lowerExprType(self, raw_expr.expr),
         .raw_deref => |raw_expr| blk: {
             const ptr_ty = try @TypeOf(self.*).lowerExprType(self, raw_expr.expr);
+            break :blk switch (self.mb.types.items[ptr_ty]) {
+                .pointer => |pointee| pointee,
+                else => return error.LowerInvariantViolation,
+            };
+        },
+        .from_raw => |value| blk: {
+            const ptr_ty = try @TypeOf(self.*).lowerExprType(self, value.expr);
             break :blk switch (self.mb.types.items[ptr_ty]) {
                 .pointer => |pointee| pointee,
                 else => return error.LowerInvariantViolation,

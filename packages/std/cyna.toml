@@ -36,6 +36,12 @@ path = "std_json.cy"
 targets = ["aarch64-apple-darwin", "aarch64-none-elf", "x86_64-none-elf", "riscv64-none-elf", "riscv32-none-elf", "arm-none-eabi", "thumbv7em-none-eabi", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
 
 [[module]]
+name = "std.crypto"
+path = "std_crypto.cy"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+c = ["std_crypto.c"]
+
+[[module]]
 name = "std.fs"
 path = "std_fs.cy"
 targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]

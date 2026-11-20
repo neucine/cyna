@@ -85,7 +85,7 @@ pub fn emitModuleWithOptions(allocator: std.mem.Allocator, module: lir.Module, o
     }
     if (string_literals.len != 0) try writer.writeByte('\n');
 
-    try emitAllocationSiteGlobals(allocator, writer);
+    try emitAllocationSiteGlobals(allocator, writer, module, reachability);
     try writer.writeByte('\n');
 
     try global_emission.emitGlobals(allocator, writer, module, string_literals);
@@ -410,7 +410,24 @@ fn emitCStringGlobal(allocator: std.mem.Allocator, writer: anytype, name: []cons
     });
 }
 
-fn emitAllocationSiteGlobals(allocator: std.mem.Allocator, writer: anytype) Error!void {
+fn moduleUsesHeapAllocation(module: lir.Module, reachability: backend_support.Reachability) bool {
+    for (module.functions, 0..) |function, function_index| {
+        if (!reachability.functionIsReachable(function_index)) continue;
+        for (function.blocks) |block| {
+            for (block.instructions) |instruction| {
+                if (instruction.data == .heap_alloc) return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn emitAllocationSiteGlobals(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    module: lir.Module,
+    reachability: backend_support.Reachability,
+) Error!void {
     try emitCStringGlobal(allocator, writer, allocation_site_file_global, "compiler/backend/llvm/emitter.zig");
     try emitCStringGlobal(allocator, writer, ".cyna.alloc.dense.copy.data", "compiler.dense.copy.data");
     try emitCStringGlobal(allocator, writer, ".cyna.alloc.sparse.copy.occupied", "compiler.sparse.copy.occupied");
@@ -421,4 +438,7 @@ fn emitAllocationSiteGlobals(allocator: std.mem.Allocator, writer: anytype) Erro
     try emitCStringGlobal(allocator, writer, ".cyna.alloc.sparse.new.data", "compiler.sparse.new.data");
     try emitCStringGlobal(allocator, writer, ".cyna.alloc.dense.runtime.object", "compiler.dense.runtime.object");
     try emitCStringGlobal(allocator, writer, ".cyna.alloc.sparse.runtime.object", "compiler.sparse.runtime.object");
+    if (moduleUsesHeapAllocation(module, reachability)) {
+        try emitCStringGlobal(allocator, writer, ".cyna.alloc.owned.leak", "compiler.owned.leak");
+    }
 }

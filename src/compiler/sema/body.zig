@@ -800,6 +800,7 @@ pub fn Owner(comptime host: anytype) type {
             subject: TypedExpr,
             is_test: ast.IsTestExpr,
         ) SemaError!TagNarrowCase {
+            _ = current_module;
             const subject_type_id = if (subject.kind(context) == .ref) canonicalRefTarget(context, subject.type_id) else subject.type_id;
             switch (canonicalTypeNode(context, subject_type_id).*) {
                 .result => {
@@ -822,7 +823,7 @@ pub fn Owner(comptime host: anytype) type {
                             try context.diagnostic_context.emitToken(path, is_test.token, "union case `{s}.{s}` does not carry a payload", .{ decl.name, is_test.case_name.? });
                             return SemaError.SemanticFailed;
                         };
-                        break :blk try parseCanonicalType(context, path, program, current_module, type_name);
+                        break :blk try parseCanonicalType(context, path, program, decl.module_name, type_name);
                     } else null;
                     return .{
                         .union_decl_id = decl_id,
@@ -1031,7 +1032,7 @@ pub fn Owner(comptime host: anytype) type {
                         try context.diagnostic_context.emitToken(path, case.token, "union `{s}` has no case `{s}`", .{ union_name, case.case_name });
                         return SemaError.SemanticFailed;
                     };
-                    const payload_type = if (union_field.type_name) |type_name| try parseType(context, path, program, current_module, type_name) else null;
+                    const payload_type = if (union_field.type_name) |type_name| try parseType(context, path, program, decl.module_name, type_name) else null;
                     if (case.payload_name != null and payload_type == null) {
                         try context.diagnostic_context.emitToken(path, case.token, "union case `{s}.{s}` does not carry a payload", .{ union_name, case.case_name });
                         return SemaError.SemanticFailed;
@@ -3274,49 +3275,38 @@ pub fn Owner(comptime host: anytype) type {
             context: *SemaContext,
             path: []const u8,
             program: ast.Program,
-            current_module: []const u8,
             locals: []const LocalBinding,
             source: *ast.Expr,
             value_type: semantic_types.TypeId,
             metadata: sir.ExprMetadata,
         ) SemaError!?sir.CheckedPlacePath {
             if (!try canonicalTypeIsOwnedValue(context, path, program, value_type)) return null;
+            const source_is_direct = switch (source.*) {
+                .name => true,
+                .field => |field| field.object.* == .name,
+                .index => |index| index.object.* == .name,
+                else => return null,
+            };
             const source_local: LocalBinding = switch (source.*) {
                 .name => |name| blk: {
                     const local = findLocal(locals, name.text) orelse return null;
                     if (local.binding_mode != .projected) return null;
                     break :blk local;
                 },
-                .field => |field| blk: {
-                    if (field.object.* != .name) return null;
-                    const local = findLocal(locals, field.object.name.text) orelse return null;
-                    if (local.is_unavailable or local.kind(context) != .@"struct") return null;
-                    const local_type = canonicalUnwrapOwned(context, local.type_id);
-                    if (canonicalTypeNode(context, local_type).* == .tuple) {
-                        const members = canonicalTypeNode(context, local_type).tuple;
-                        const index = std.fmt.parseInt(usize, field.field, 10) catch return null;
-                        if (index >= members.len or members[index] != value_type) return null;
-                        break :blk local;
-                    }
-                    const resolved = try typeStructField(context, path, program, current_module, local.type_id, field.field, field.field_token);
-                    if (resolved.decl.layout != .normal or resolved.field_type_id != value_type) return null;
-                    break :blk local;
-                },
-                .index => |index| blk: {
-                    if (index.object.* != .name) return null;
-                    const local = findLocal(locals, index.object.name.text) orelse return null;
-                    if (local.is_unavailable) return null;
-                    break :blk local;
-                },
+                .field => |field| projectedSourceRootLocal(locals, field.object) orelse return null,
+                .index => |index| projectedSourceRootLocal(locals, index.object) orelse return null,
                 else => return null,
             };
             if (source_local.is_unavailable) return null;
             const place = metadata.checkedPlacePath() orelse return null;
             if (place.root != .binding or place.projections == null or place.projections.?.len == 0) return null;
+            var crosses_union_payload = false;
             for (place.projections.?) |projection| switch (projection.step) {
+                .union_payload => crosses_union_payload = true,
                 .field, .index => {},
                 else => return null,
             };
+            if (!source_is_direct and !crosses_union_payload) return null;
             const owner = blk: {
                 for (locals) |candidate| {
                     if (candidate.binding_id == place.root.binding) break :blk candidate;
@@ -3326,12 +3316,84 @@ pub fn Owner(comptime host: anytype) type {
             if (owner.binding_mode != .owning or owner.is_unavailable or
                 owner.scope_depth > context.function_state.block_depth) return null;
             if (owner.kind(context) != .@"struct" and
+                owner.kind(context) != .@"union" and
                 owner.kind(context) != .array and owner.kind(context) != .dense_array and
                 owner.kind(context) != .slice and owner.kind(context) != .ref) return null;
             if ((owner.kind(context) == .slice or owner.kind(context) == .ref) and
                 !owner.borrowed_place.hasBorrow()) return null;
             if (source_local.binding_mode == .owning and source_local.binding_id != owner.binding_id) return null;
+            if (!try projectedPathIsStable(context, path, program, owner.type_id, place.projections.?)) return null;
             return .{ .root = place.root, .projections = place.projections, .non_owning = true };
+        }
+
+        fn projectedSourceRootLocal(locals: []const LocalBinding, source: *ast.Expr) ?LocalBinding {
+            return switch (source.*) {
+                .name => |name| findLocal(locals, name.text),
+                .field => |field| projectedSourceRootLocal(locals, field.object),
+                .index => |index| projectedSourceRootLocal(locals, index.object),
+                else => null,
+            };
+        }
+
+        fn projectedPathIsStable(
+            context: *SemaContext,
+            path: []const u8,
+            program: ast.Program,
+            root_type: semantic_types.TypeId,
+            projections: []const sir.CheckedPlaceProjection,
+        ) SemaError!bool {
+            var current_type = canonicalUnwrapOwned(context, root_type);
+            for (projections) |projection| {
+                var node = canonicalTypeNode(context, current_type);
+                while (node.* == .ref_) {
+                    current_type = node.ref_.target;
+                    node = canonicalTypeNode(context, current_type);
+                }
+                switch (projection.step) {
+                    .field => |field| {
+                        if (canonicalTypeKind(context, current_type) != .@"struct") return false;
+                        const decl_id = canonicalNominalDeclId(context, current_type) orelse return false;
+                        if (decl_id != field.owner_decl_id) return false;
+                        const decl = lookupStructDeclById(context, program, decl_id) orelse return false;
+                        if (decl.layout != .normal) return false;
+                        const decl_field = lookupStructField(decl, field.name) orelse return false;
+                        const field_type = try structFieldTypeId(context, path, program, decl, decl_field);
+                        if (field_type != projection.result_type_id) return false;
+                        current_type = field_type;
+                    },
+                    .union_payload => |field| {
+                        if (canonicalTypeKind(context, current_type) != .@"union") return false;
+                        const decl_id = canonicalNominalDeclId(context, current_type) orelse return false;
+                        if (decl_id != field.owner_decl_id) return false;
+                        const decl = lookupUnionDeclById(context, program, decl_id) orelse return false;
+                        if (decl.layout != .normal or decl.kind != .named_cases) return false;
+                        const union_field = findUnionField(decl.fields, field.name) orelse return false;
+                        const type_name = union_field.type_name orelse return false;
+                        const payload_type = try parseCanonicalType(context, path, program, decl.module_name, type_name);
+                        if (payload_type != projection.result_type_id) return false;
+                        current_type = payload_type;
+                    },
+                    .index => |index| {
+                        current_type = switch (node.*) {
+                            .array => |array| array.item,
+                            .dense_array => |item| item,
+                            .slice => |slice| slice.item,
+                            .tuple => |members| blk: {
+                                const position = switch (index) {
+                                    .fixed => |value| std.math.cast(usize, value) orelse return false,
+                                    .dynamic => return false,
+                                };
+                                if (position >= members.len) return false;
+                                break :blk members[position];
+                            },
+                            else => return false,
+                        };
+                        if (current_type != projection.result_type_id) return false;
+                    },
+                    .range => return false,
+                }
+            }
+            return true;
         }
 
         fn projectedBorrowDependency(context: *SemaContext, locals: []const LocalBinding, place: sir.CheckedPlacePath) ownership_owner.BorrowedPlaceDependency {
@@ -3345,6 +3407,7 @@ pub fn Owner(comptime host: anytype) type {
             var projection = if (via_alias) owner.borrowed_place.projection else ownership_owner.PlaceProjectionPath.root();
             for (place.projections.?) |step| switch (step.step) {
                 .field => |field| projection.appendField(field.name),
+                .union_payload => |field| projection.appendField(field.name),
                 .index => |index| projection.appendIndex(if (index == .fixed) index.fixed else null),
                 else => unreachable,
             };
@@ -3385,6 +3448,13 @@ pub fn Owner(comptime host: anytype) type {
                 .index => |index| projectedRootLocal(locals, index.object),
                 else => null,
             };
+        }
+
+        fn isResourceFromRawInitializer(expr: *ast.Expr) bool {
+            return expr.* == .method_call and
+                expr.method_call.object.* == .name and
+                std.mem.eql(u8, expr.method_call.object.name.text, "resource") and
+                std.mem.eql(u8, expr.method_call.method, "from_raw");
         }
 
         pub fn lowerStmt(
@@ -3442,6 +3512,9 @@ pub fn Owner(comptime host: anytype) type {
                         .message = "binding type annotation declared here",
                     } else null;
                     defer context.function_state.expected_type_origin = saved_expectation_origin;
+                    const saved_resource_from_raw_initializer = context.function_state.resource_from_raw_initializer;
+                    context.function_state.resource_from_raw_initializer = isResourceFromRawInitializer(local.init);
+                    defer context.function_state.resource_from_raw_initializer = saved_resource_from_raw_initializer;
                     const init = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals.items, local.init, local_type_id);
                     errdefer init.expr.destroy(allocator);
                     const final_local_type_id = local_type_id orelse init.type_id;
@@ -3474,7 +3547,7 @@ pub fn Owner(comptime host: anytype) type {
                     }
                     const source_metadata = semanticExprMetadata(context, init.expr) orelse return error.SemanticFailed;
                     const projected_place = if (!local.is_mutable)
-                        try projectedBindingPlace(context, path, program, current_module, locals.items, local.init, final_local_type_id, source_metadata)
+                        try projectedBindingPlace(context, path, program, locals.items, local.init, final_local_type_id, source_metadata)
                     else
                         null;
                     if (projected_place) |place| {
@@ -5972,10 +6045,13 @@ pub fn Owner(comptime host: anytype) type {
                 if (record.effect != .leak or record.effect.leak != .place) return error.SemanticFailed;
                 const source = record.effect.leak.place;
                 if (source.root != .binding or source.projections != null or source.non_owning) return error.SemanticFailed;
-                const name = expr.method_call.object.name;
-                const index = findLocalIndex(locals, name.text) orelse return error.SemanticFailed;
+                const name = lowered.expr.leak_owned_local;
+                const index = findLocalIndex(locals, name) orelse return error.SemanticFailed;
                 if (locals[index].binding_id != source.root.binding) return error.SemanticFailed;
-                try markLocalHandedOff(context, path, @constCast(locals), name);
+                try markLocalHandedOff(context, path, @constCast(locals), .{
+                    .text = name,
+                    .token = locals[index].declaration_token orelse expr.method_call.method_token,
+                });
             }
             return lowered;
         }
@@ -6673,7 +6749,7 @@ pub fn Owner(comptime host: anytype) type {
                     try context.diagnostic_context.emitToken(path, case.token, "union case `{s}.{s}` requires a payload", .{ union_name, case.case_name });
                     return SemaError.SemanticFailed;
                 };
-                const payload_type = try parseType(context, path, program, current_module, type_name);
+                const payload_type = try parseType(context, path, program, decl.module_name, type_name);
                 const lowered = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, payload_expr, payload_type);
                 errdefer lowered.expr.destroy(allocator);
                 try expectType(context, path, firstExprToken(payload_expr), payload_type, lowered.type_id);
@@ -6986,6 +7062,23 @@ pub fn Owner(comptime host: anytype) type {
 
                 try context.diagnostic_context.emitToken(path, cast.token, "`as!` requires packed/integer bit reinterpretation or raw-address integer/pointer rebinding", .{});
                 return SemaError.SemanticFailed;
+            }
+
+            if (subject.kind(context) == .int and target_kind == .rune) {
+                out.* = .{ .cast = .{
+                    .subject = subject.expr,
+                    .target_type_id = target,
+                    .union_case_name = null,
+                    .fallible = cast.fallible,
+                    .reinterpret = false,
+                } };
+                const result_ty = if (cast.fallible) try canonicalOptionalTypeId(context, target) else target;
+                return try makeTypedExprWithProvenance(
+                    context,
+                    out,
+                    result_ty,
+                    try propagatedProvenanceForTypeId(context, path, program, current_module, result_ty, subject.provenance),
+                );
             }
 
             if (subject.kind(context) == .int and target_kind == .int) {
@@ -8664,6 +8757,68 @@ pub fn Owner(comptime host: anytype) type {
                     };
                     return lowerCall(context, allocator, path, program, current_module, globals, locals, out, module_call, null);
                 }
+                if (std.mem.eql(u8, object_name, "resource") and findLocal(locals, object_name) == null) {
+                    if (std.mem.eql(u8, call.method, "leak")) {
+                        if (call.type_args.len != 0) {
+                            try context.diagnostic_context.emitToken(path, call.method_token, "resource.leak does not accept explicit type arguments", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        if (call.args.len != 1) {
+                            try context.diagnostic_context.emitToken(path, call.method_token, "resource.leak expects one owned value", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        return lowerMethodCallInternal(context, allocator, path, program, current_module, globals, locals, out, .{
+                            .object = call.args[0].value,
+                            .method = "leak",
+                            .method_token = call.method_token,
+                            .type_args = &.{},
+                            .args = &.{},
+                        }, null);
+                    }
+                    if (std.mem.eql(u8, call.method, "from_raw")) {
+                        const initializing_local = context.function_state.resource_from_raw_initializer;
+                        if (!initializing_local) {
+                            try context.diagnostic_context.emitToken(path, call.method_token, "resource.from_raw must directly initialize an owning local", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        context.function_state.resource_from_raw_initializer = false;
+                        defer context.function_state.resource_from_raw_initializer = initializing_local;
+                        if (call.type_args.len != 0) {
+                            try context.diagnostic_context.emitToken(path, call.method_token, "resource.from_raw does not accept explicit type arguments", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        if (call.args.len != 1) {
+                            try context.diagnostic_context.emitToken(path, call.method_token, "resource.from_raw expects one raw pointer", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        const raw = try lowerExpr(context, allocator, path, program, current_module, globals, locals, call.args[0].value, null);
+                        errdefer raw.expr.destroy(allocator);
+                        const raw_type = canonicalTypeNode(context, raw.type_id).*;
+                        if (raw_type != .raw) {
+                            try context.diagnostic_context.emitToken(path, firstExprToken(call.args[0].value), "resource.from_raw expects a non-optional `*T` raw pointer", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        const pointee = raw_type.raw.target;
+                        if (canonicalTypeKind(context, pointee) == .function or
+                            canonicalTypeKind(context, pointee) == .arrow_callable)
+                        {
+                            try context.diagnostic_context.emitToken(path, firstExprToken(call.args[0].value), "resource.from_raw cannot reconstruct a callable value", .{});
+                            return SemaError.SemanticFailed;
+                        }
+                        if (call.args[0].value.* == .name) {
+                            try markLocalHandedOff(context, path, @constCast(locals), call.args[0].value.name);
+                        }
+                        out.* = .{ .from_raw = .{
+                            .expr = raw.expr,
+                            .is_volatile = raw_type.raw.is_volatile,
+                        } };
+                        const owned_type = try canonicalOwnedTypeId(context, pointee);
+                        return withIntrinsic(
+                            try makeTypedExprWithProvenance(context, out, owned_type, .none()),
+                            .resource_from_raw,
+                        );
+                    }
+                }
             }
 
             const object = prelowered_receiver orelse try lowerExpr(context, allocator, path, program, current_module, globals, locals, call.object, null);
@@ -9177,7 +9332,7 @@ pub fn Owner(comptime host: anytype) type {
                             try appendOwnedLowered(allocator, &inferred_method_args, try lowerMethodInferenceArg(context, allocator, path, program, current_module, globals, inference_locals, arg.value, param.type_name));
                         }
                     }
-                    const concrete = try instantiateMethodCall(context, allocator, path, program, globals, instantiated.module_name, struct_name, call.method_token, resolved, base_decl.type_params, instantiated.type_args, call.type_args, if (inferred_method_args.items.len != 0) inferred_method_args.items else null);
+                    const concrete = try instantiateMethodCall(context, allocator, path, program, globals, current_module, struct_name, call.method_token, resolved, base_decl.type_params, instantiated.type_args, call.type_args, if (inferred_method_args.items.len != 0) inferred_method_args.items else null);
                     lowered_method_owner = concrete.owner;
                     lowered_method_name = concrete.name;
                     generic_method_params = concrete.params;
@@ -9244,7 +9399,7 @@ pub fn Owner(comptime host: anytype) type {
                         try appendOwnedLowered(allocator, &inferred_method_args, try lowerMethodInferenceArg(context, allocator, path, program, current_module, globals, inference_locals, arg.value, param.type_name));
                     }
                 }
-                const concrete = try instantiateMethodCall(context, allocator, path, program, globals, method.module_name, method.owner orelse struct_name, call.method_token, method, &.{}, &.{}, call.type_args, if (inferred_method_args.items.len != 0) inferred_method_args.items else null);
+                const concrete = try instantiateMethodCall(context, allocator, path, program, globals, current_module, method.owner orelse struct_name, call.method_token, method, &.{}, &.{}, call.type_args, if (inferred_method_args.items.len != 0) inferred_method_args.items else null);
                 lowered_method_owner = concrete.owner;
                 lowered_method_name = concrete.name;
                 generic_method_params = concrete.params;
@@ -13804,9 +13959,9 @@ pub fn Owner(comptime host: anytype) type {
             for (args, function.params, 0..) |arg, param, i| {
                 if (!summary_relation.relation.returnsSource(function.params, summary_relation.source_can_borrow, i)) continue;
                 const param_type = if (generic_params) |bindings|
-                    try parseTypeWithBindings(context, path, program, current_module, param.type_name, null, bindings, generic_args.?)
+                    try parseTypeWithBindings(context, path, program, function.module_name, param.type_name, null, bindings, generic_args.?)
                 else
-                    try parseType(context, path, program, current_module, param.type_name);
+                    try parseType(context, path, program, function.module_name, param.type_name);
                 combined = Provenance.combine(combined, try borrowForwardingResultArgProvenance(context, path, program, current_module, globals, locals, arg.value, param_type));
             }
             return try propagatedProvenanceForTypeId(context, path, program, current_module, return_type, combined);
@@ -13839,9 +13994,9 @@ pub fn Owner(comptime host: anytype) type {
             for (args, method.params[1..], 0..) |arg, param, i| {
                 if (!summary_relation.relation.returnsSource(method.params, summary_relation.source_can_borrow, i + 1)) continue;
                 const param_type = if (generic_params) |bindings|
-                    try parseTypeWithBindings(context, path, program, current_module, param.type_name, null, bindings, generic_args.?)
+                    try parseTypeWithBindings(context, path, program, method.module_name, param.type_name, null, bindings, generic_args.?)
                 else
-                    try parseType(context, path, program, current_module, param.type_name);
+                    try parseType(context, path, program, method.module_name, param.type_name);
                 combined = Provenance.combine(combined, try borrowForwardingResultArgProvenance(context, path, program, current_module, globals, locals, arg.value, param_type));
             }
             return try propagatedProvenanceForTypeId(context, path, program, current_module, return_type, combined);
@@ -13920,9 +14075,9 @@ pub fn Owner(comptime host: anytype) type {
             if (args.len != function.params.len) return;
             for (function.params, args, 0..) |param, arg, source_index| {
                 const source_type = if (generic_params) |bindings|
-                    try parseTypeWithBindings(context, path, program, current_module, param.type_name, null, bindings, generic_args.?)
+                    try parseTypeWithBindings(context, path, program, function.module_name, param.type_name, null, bindings, generic_args.?)
                 else
-                    try parseType(context, path, program, current_module, param.type_name);
+                    try parseType(context, path, program, function.module_name, param.type_name);
                 if (canonicalTypeKind(context, source_type) == .ref and !canonicalRefIsConst(context, source_type))
                     try rejectProjectedBindingWritableCall(context, path, program, current_module, globals, locals, arg.value);
                 const source_provenance = try borrowForwardingArgProvenance(context, path, program, current_module, globals, locals, arg.value, source_type);
@@ -13938,9 +14093,9 @@ pub fn Owner(comptime host: anytype) type {
                     if (!summary_relation.relation.escapesToSinkSource(function.params, summary_relation.source_can_borrow, source_index, sink_index)) continue;
                     const sink_param = function.params[sink_index];
                     const sink_type = if (generic_params) |bindings|
-                        try parseTypeWithBindings(context, path, program, current_module, sink_param.type_name, null, bindings, generic_args.?)
+                        try parseTypeWithBindings(context, path, program, function.module_name, sink_param.type_name, null, bindings, generic_args.?)
                     else
-                        try parseType(context, path, program, current_module, sink_param.type_name);
+                        try parseType(context, path, program, function.module_name, sink_param.type_name);
                     const target = try callEscapeTarget(context, path, program, current_module, globals, locals, args[sink_index].value, sink_type);
                     if (!provenanceOutlivesTarget(locals, source_provenance, target)) {
                         try emitCallBorrowEscape(context, path, locals, firstExprToken(arg.value), source_provenance);

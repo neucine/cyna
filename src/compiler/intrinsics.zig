@@ -49,6 +49,8 @@ pub const Id = enum {
     slice_len,
     owned_ptr,
     owned_leak,
+    resource_leak,
+    resource_from_raw,
     syntax_index,
     syntax_index_set,
     syntax_iter,
@@ -130,6 +132,8 @@ pub const definitions = [_]Definition{
     .{ .id = .slice_len, .category = .receiver_method, .name = "len", .receiver = .slice },
     .{ .id = .owned_ptr, .category = .receiver_method, .name = "ptr", .receiver = .owned },
     .{ .id = .owned_leak, .category = .receiver_method, .name = "leak", .receiver = .owned, .mutates_receiver = true },
+    .{ .id = .resource_leak, .category = .language_builtin, .owner = "resource", .name = "leak", .mutates_receiver = true },
+    .{ .id = .resource_from_raw, .category = .language_builtin, .owner = "resource", .name = "from_raw" },
     .{ .id = .syntax_index, .category = .language_syntax, .name = "index" },
     .{ .id = .syntax_index_set, .category = .language_syntax, .name = "index_set", .mutates_receiver = true },
     .{ .id = .syntax_iter, .category = .language_syntax, .name = "iter" },
@@ -326,6 +330,8 @@ test "receiver method resolution is typed" {
     try std.testing.expectEqual(Id.sparse_len, resolveMethod(.sparse, "len").?);
     try std.testing.expectEqual(Id.slice_len, resolveMethod(.slice, "len").?);
     try std.testing.expectEqual(Id.owned_leak, resolveMethod(.owned, "leak").?);
+    try std.testing.expectEqual(Id.resource_leak, resolveCall("resource", "leak").?);
+    try std.testing.expectEqual(Id.resource_from_raw, resolveCall("resource", "from_raw").?);
     try std.testing.expect(resolveMethod(.string, "push") == null);
     try std.testing.expect(mutatesReceiver(.sequence_push));
     try std.testing.expect(!mutatesReceiver(.string_bytes));

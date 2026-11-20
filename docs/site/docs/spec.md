@@ -341,15 +341,15 @@ A one-position tuple pattern needs a trailing comma: `const (only,) = value;`.
 
 An owned value initializer moves into one owner for the pattern; an owned local
 used as that initializer becomes unavailable. A projected initializer retains
-its existing owner. Owned resource leaves are read-only
-projected bindings into that owner, including nested fields and indexed
-elements. They do not detach resources or take cleanup responsibility. Borrowed
-initializers preserve their alias capability and lifetime for admitted leaves;
-owned resource leaves through reference parameter roots are currently rejected
-by the projected binding rule. The owner cleans up once after its projected
-leaves' final uses and defers. The ordinary projected
-place rules in §9 apply to each leaf. Indexed patterns require direct storage
-or tracked slice views; value-returning indexing hooks cannot supply places.
+its existing owner. Owned resource leaves are read-only projected bindings into
+that owner, including nested fields, checked named-union payloads, and indexed
+elements. They do not detach resources or take cleanup responsibility.
+Borrowed initializers preserve their alias capability and lifetime for admitted
+leaves; owned resource leaves through reference parameter roots are currently
+rejected by the projected binding rule. The owner cleans up once after its
+projected leaves' final uses and defers. The ordinary projected place rules in
+§9 apply to each leaf. Indexed patterns require direct storage or tracked slice
+views; value-returning indexing hooks cannot supply places.
 
 Use `const _ = expression;` to deliberately discard a value without creating
 a binding. The expression is evaluated once. An owned result is destroyed at
@@ -1230,17 +1230,23 @@ as an implicit borrow. Use `&token.case_name` for alias access where supported,
 `token.case_name.clone()` for an owned duplicate, or an explicit detachable
 operation where the place kind supports it.
 
-A `const` binding may name an owned field of an ordinary unpacked struct or
-an indexed element of owned array storage when its root is a live owning
-local: `const field = owner.inner;` or `const item = entries[index];`. An
-indexed element may also be reached through a slice borrowed from a live
-owner, including a writable parameter alias. This is a
-read-only projected binding. `const same = field;` and further owned field
-bindings preserve the original owner and checked field path. An explicit type
-annotation checks the field type without transferring ownership. The owner
-alone cleans up the value, after uses of the projected binding and its defers.
-An indexed binding captures the selected element when the binding is created;
-later changes to the index variable do not redirect the binding.
+A `const` binding may name an owned field of an ordinary unpacked struct, an
+owned payload of a checked named-union case, or an indexed element of owned
+array storage when its root is a live owning local:
+`const field = owner.inner;`, `const payload = boxed.payload;`, or
+`const item = entries[index];`. An indexed element may also be reached through
+a slice borrowed from a live owner, including a writable parameter alias.
+Inside a narrowed named-union branch, a path may cross the checked payload and
+continue into stable owned storage, as in
+`const items = boxed.payload.items;`.
+
+These are read-only projected bindings. `const same = field;` and further
+owned field bindings preserve the original owner and checked path, including
+ordinary field, named-union payload, and constant-index steps. An explicit
+type annotation checks the projected type without transferring ownership. The
+owner alone cleans up the value, after uses of the projected binding and its
+defers. An indexed binding captures the selected element when the binding is
+created; later changes to the index variable do not redirect the binding.
 The projected borrow remains live through its last use, including a deferred
 use. Once no use remains, the owner may be moved or dropped and the selected
 place may be replaced under ordinary place rules.
@@ -1251,7 +1257,8 @@ that overlap its checked place path. Disjoint sibling fields and distinct
 constant indices remain mutable under ordinary place rules; dynamic indices
 conservatively overlap. `var` bindings, temporaries, packed fields, alias
 roots without a tracked borrow dependency, value-returning indexing hooks,
-and checked payloads do not acquire this rule.
+`c union` fields, and optional or switch capture bindings do not acquire this
+rule. Captured payload bindings keep their existing owning-mode behavior.
 
 Other projected owned value reads in binding, assignment, return, or owned-value
 call-argument positions are rejected unless the program spells an explicit
@@ -1939,6 +1946,12 @@ Reconstructing cleanup responsibility is explicit:
 var user: ^User = resource.from_raw(raw);
 ```
 
+`resource.from_raw(raw)` must directly initialize an owning local. When `raw`
+names a local or parameter, reconstruction consumes that binding so the same
+handle cannot be reconstructed twice through the same name. The local's scope
+exit drops its nested owned values before releasing the outer allocation
+created by `resource.leak(...)`.
+
 ### 11.6 Volatile Raw Pointers
 
 Volatile access is a raw-pointer feature for device memory and other foreign
@@ -2357,13 +2370,12 @@ Semantics for the byte-oriented surface:
 5. prefix/suffix/contains checks operate on byte-equal UTF-8 sequences
 6. these operations are defined by contents, not by string identity
 
-The long-term surface should keep byte-level and text-level operations
-visibly distinct. `bytes()` is the systems/protocol view. A future `runes()`
-view would decode valid UTF-8 into `char` values without failure; it is not
-implemented in the current standard library. A generic string slicing API is
+The long-term surface keeps byte-level and text-level operations visibly
+distinct. `bytes()` is the systems/protocol view. `chars()` iterates Unicode
+scalar `char` values. A generic string slicing API is
 inherently ambiguous
 unless its unit is explicit; APIs should prefer names such as
-`byte_slice(...)` or `rune_slice(...)` if both forms are supported.
+`byte_slice(...)` or `char_slice(...)` if both forms are supported.
 
 ### 14.8 Views Derived From Strings
 
@@ -2495,7 +2507,7 @@ Required rules:
 
 ### 14.10 char Literals
 
-A rune literal denotes exactly one Unicode scalar value.
+A `char` literal denotes exactly one Unicode scalar value.
 
 ```cyna
 const a: char = 'A';
@@ -2529,16 +2541,18 @@ const huge: char = '\u{110000}'; // outside Unicode range
 
 Required literal rules:
 
-1. a rune literal must decode to exactly one Unicode scalar value
+1. a `char` literal must decode to exactly one Unicode scalar value
 2. surrogate code points are rejected
 3. code points above `U+10FFFF` are rejected
-4. shaping a rune literal to an integer type is allowed only when the value is
+4. shaping a `char` literal to an integer type is allowed only when the value is
    representable by the target type
 5. shaping to `char` is allowed only for valid Unicode scalar values
-6. in an operation with a concrete integer operand, a rune literal may be
+6. in an operation with a concrete integer operand, a `char` literal may be
    shaped to that operand's type when the value is representable
 7. runtime casts from `char` to narrower integer types use the ordinary checked
    `as` / `as?` conversion rules
+8. integer-to-`char` `as` / `as?` casts accept only Unicode scalar values;
+   surrogates and values above `U+10FFFF` fail the checked cast
 
 This gives ASCII-heavy systems code concise constants without making text and
 bytes the same type:
@@ -2580,12 +2594,15 @@ for b in bs {
 }
 ```
 
-Unicode-scalar iteration needs a decoder; `string.runes()` is a planned API,
-not a current method. Its intended element type is `char`, a Unicode scalar
+`string.chars()` yields `char`, a Unicode scalar
 value. This is not the same as a
 user-perceived character or grapheme cluster. For example, a base letter plus a
 combining mark is two `char` values, and a flag emoji formed from regional
 indicator symbols is also multiple `char` values.
+The iterator owns a shared string value, so it remains valid when created from
+a temporary string. It decodes UTF-8 without allocating per element. If a
+byte-created string contains malformed UTF-8, each invalid leading byte yields
+`U+FFFD` and iteration advances by one byte.
 
 ### 14.12 Performance Intent
 
@@ -4482,7 +4499,7 @@ Current implicit behavior is:
 1. identity
 2. contextual shaping such as `T -> ?T`
 3. literal shaping into the expected builtin numeric type
-4. rune literal shaping into `char` or a representable integer type
+4. `char` literal shaping into `char` or a representable integer type
 5. mixed numeric binary operators where `int` is promoted to the other
    operand's float type
 
@@ -4491,7 +4508,7 @@ Examples:
 ```cyna
 const x: i32 = 42;   // integer literal shaped by context
 const y: f32 = 1.5;  // float literal shaped by context
-const ch: char = 'A'; // rune literal shaped by context
+const ch: char = 'A'; // char literal shaped by context
 const b: u8 = 'A';    // ok: U+0041 fits u8
 const z = 1 + 1.5;   // int promoted to float, result is float
 ```
@@ -6082,16 +6099,17 @@ Standard-library availability in the current repository:
 | `std.prelude` | Implemented | core targets |
 | `std.alloc` | Implemented, constrained | core targets |
 | `std.testing` | Implemented, constrained | core targets; used by `cyna test` |
-| `std.io` | Implemented, constrained | core targets; writer callback surface |
+| `std.io` | Implemented, constrained | core targets; runtime writer callback plus byte reader/writer protocols and bounded helpers |
 | `std.mem` | Implemented, constrained | core targets; byte-slice utilities |
 | `std.json` | Implemented, constrained | core targets; strict RFC 8259 parse/stringify and ordered value tree |
-| `std.fs` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
+| `std.crypto` | Implemented, initial surface | hosted macOS arm64, Linux x86-64, and Windows x86-64 in the package manifest; native behavior verified on macOS arm64 |
+| `std.fs` | Implemented, constrained | hosted; manifest lists macOS arm64, Linux x86-64, and Windows x86-64; file stream behavior verified on macOS arm64 |
 | `std.path` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.time` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.process` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.thread` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
 | `std.sync` | Implemented, constrained | hosted; currently shipped for `aarch64-apple-darwin` |
-| `std.string` | Reserved / planned | no shipped module yet |
+| `std.string` | Reserved / planned | no shipped module yet; `string.chars()` is a built-in type method supplied by the prelude |
 | `std.c` | Reserved / planned | no shipped module yet |
 
 “Core” and “hosted” are intended portability classes, not a promise that

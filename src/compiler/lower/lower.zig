@@ -1029,6 +1029,7 @@ const FunctionLowerer = struct {
     pub const lowerCastTargetType = expression_lowering.lowerCastTargetType;
     pub const lowerOptionalPayloadCast = expression_lowering.lowerOptionalPayloadCast;
     pub const lowerIntToIntCast = expression_lowering.lowerIntToIntCast;
+    pub const lowerIntToCharCast = expression_lowering.lowerIntToCharCast;
     pub const lowerIntToIntReinterpretCast = expression_lowering.lowerIntToIntReinterpretCast;
     pub const lowerBitcastReinterpretCast = expression_lowering.lowerBitcastReinterpretCast;
     pub const lowerPackedStructToIntCast = expression_lowering.lowerPackedStructToIntCast;
@@ -1375,6 +1376,32 @@ const FunctionLowerer = struct {
 
     pub fn markCleanupActive(self: *FunctionLowerer, local: LocalState) void {
         if (local.cleanup_index) |index| self.ownership.setCleanupActive(index, true);
+    }
+
+    pub fn attachHeapCleanup(
+        self: *FunctionLowerer,
+        name: []const u8,
+        local: LocalState,
+        heap_ptr: lir.ValueId,
+    ) LowerError!LocalState {
+        var updated = local;
+        if (updated.cleanup_index) |index| {
+            self.ownership.cleanup_entries.items[index].heap_ptr = heap_ptr;
+            self.ownership.setCleanupActive(index, false);
+        } else {
+            const cleanup_name = try self.mb.allocator.dupe(u8, name);
+            errdefer self.mb.allocator.free(cleanup_name);
+            updated.cleanup_index = try self.ownership.appendCleanup(self.mb.allocator, .{
+                .name = cleanup_name,
+                .ptr_value = local.ptr_value,
+                .ty = local.ty,
+                .active = false,
+                .heap_ptr = heap_ptr,
+            });
+            try self.recordOwnershipTrace("heap owner {s}", .{name});
+            try self.locals.put(self.mb.allocator, name, updated);
+        }
+        return updated;
     }
 
     pub fn restoreLocalsFrom(self: *FunctionLowerer, start: usize) void {

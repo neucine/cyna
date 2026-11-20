@@ -174,6 +174,58 @@ test "projected const bindings name stable owned struct fields transitively" {
     try expectSemanticSuccess(std.testing.allocator, "projected_const_struct_fields", source);
 }
 
+test "projected const bindings retain checked named-union payloads" {
+    const prefix =
+        \\struct Payload { items: [:]i32; }
+        \\union Boxed { payload: Payload; empty; }
+    ;
+    try expectSemanticSuccess(std.testing.allocator, "projected_union_payload", prefix ++
+        \\fn main(): i32 {
+        \\    var boxed: Boxed = .payload(Payload { items: [40, 2] });
+        \\    const payload: Payload = boxed.payload;
+        \\    const same = payload;
+        \\    const items = same.items;
+        \\    const answer = items[0] + items[1];
+        \\    drop boxed;
+        \\    return answer;
+        \\}
+    );
+    try expectSemanticSuccess(std.testing.allocator, "projected_union_payload_direct_nested", prefix ++
+        \\fn main(): i32 {
+        \\    var boxed: Boxed = .payload(Payload { items: [40, 2] });
+        \\    if boxed is .payload {
+        \\        const items = boxed.payload.items;
+        \\        return items[0] + items[1];
+        \\    }
+        \\    return 0;
+        \\}
+    );
+    try expectSemanticFailedMessage(std.testing.allocator, "projected_union_payload_owner_drop", prefix ++
+        \\fn main(): void {
+        \\    var boxed: Boxed = .payload(Payload { items: [1] });
+        \\    const payload = boxed.payload;
+        \\    drop boxed;
+        \\    println(payload.items.len());
+        \\}
+    , "while borrow `payload` is live");
+    try expectSemanticFailedMessage(std.testing.allocator, "projected_union_payload_deferred_owner_drop", prefix ++
+        \\fn main(): void {
+        \\    var boxed: Boxed = .payload(Payload { items: [1] });
+        \\    const payload = boxed.payload;
+        \\    defer println(payload.items.len());
+        \\    drop boxed;
+        \\}
+    , "while borrow `payload` is live");
+    try expectSemanticFailedMessage(std.testing.allocator, "projected_union_payload_handoff", prefix ++
+        \\fn consume(payload: Payload): void {}
+        \\fn main(): void {
+        \\    var boxed: Boxed = .payload(Payload { items: [1] });
+        \\    const payload = boxed.payload;
+        \\    consume(payload);
+        \\}
+    , "cannot hand off a projected owned value via function call");
+}
+
 test "indexed projected binding protects selected owned element" {
     const prefix =
         \\struct Inner { items: [:]i32; }

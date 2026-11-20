@@ -783,11 +783,16 @@ test "capitalized List Map and Set resolve through prelude generic structs" {
     var list_args = [_]ast.TypeName{
         .{ .array_len = null, .name = "string", .args = &.{}, .token = zero },
     };
+    var module_infos = [_]ast.ModuleInfo{.{
+        .name = package_manifest.prelude_module_name,
+        .autoload = true,
+        .imports = &.{},
+    }};
     const program = ast.Program{
         .source = "",
         .tokens = &.{},
         .imports = &.{},
-        .module_infos = &.{},
+        .module_infos = module_infos[0..],
         .globals = &.{},
         .asm_consts = &.{},
         .aliases = &.{},
