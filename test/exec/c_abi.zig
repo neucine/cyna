@@ -463,3 +463,35 @@ test "native C ABI uses explicit C-layout adapters for byte payloads" {
 
     try expectNativeWithCSources("native_export_explicit_byte_payload.cy", source, &.{.{ .name = "explicit_byte_payload.c", .source = c_source }}, 42);
 }
+
+test "C ABI preserves fractional f64 through c_double and struct returns" {
+    const source =
+        \\c struct Value { payload: c_llong; tag: c_llong; }
+        \\extern c("fraction") fn fraction(): c_double;
+        \\extern c("number") fn number(value: c_double): Value;
+        \\fn main(): i32 {
+        \\    const value: f64 = fraction() as f64;
+        \\    const result = number(value as c_double);
+        \\    if result.tag != 7 { return 1; }
+        \\    return result.payload as i32;
+        \\}
+    ;
+    const c_source =
+        \\typedef struct { long long payload; long long tag; } Value;
+        \\double fraction(void) { return 0.1; }
+        \\Value number(double value) { return (Value){value == 0.1 ? 42 : 2, 7}; }
+    ;
+    try expectNativeWithCSources("fractional_double.cy", source, &.{.{ .name = "fractional_double.c", .source = c_source }}, 42);
+}
+
+test "native indexed writes through borrowed fixed arrays update caller storage" {
+    const source =
+        \\fn fill(output: &[8]usize): void { output[0] = 3; output[7] = 5; }
+        \\fn main(): i32 {
+        \\    var values: [8]usize = [0] ** 8;
+        \\    fill(&values);
+        \\    return (values[0] + values[7]) as i32;
+        \\}
+    ;
+    try expectNamedNative("borrowed_fixed_array_write", source, 8);
+}

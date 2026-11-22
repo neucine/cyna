@@ -747,6 +747,9 @@ pub const Type = enum {
 };
 
 pub const Module = struct {
+    // Borrowed indexes exist only on the verifier's local module copy.
+    verification_metadata: ?*const std.AutoHashMapUnmanaged(*const Expr, *const ExprMetadata) = null,
+    verification_functions: ?*const std.AutoHashMapUnmanaged(identity.DeclId, usize) = null,
     canonical_types: ?semantic_types.TypeInterner = null,
     expr_metadata: []const ExprMetadataEntry = &.{},
     expr_metadata_retained: bool = false,
@@ -918,6 +921,7 @@ pub const Module = struct {
     }
 
     pub fn metadataForExpr(self: Module, expr: *const Expr) ?ExprMetadata {
+        if (self.verification_metadata) |index| return if (index.get(expr)) |metadata| metadata.* else null;
         for (self.expr_metadata) |entry| {
             if (entry.expr == expr) return entry.metadata;
         }
@@ -998,11 +1002,7 @@ pub const Module = struct {
     }
 
     pub fn verify(self: Module) VerifyError!void {
-        try self.verifyValueActions();
-        try self.verifyIntrinsicCalls();
-        try self.verifyCompilerIdentities();
-        try self.verifyGenericRequirementsWithMetadata(self.expr_metadata_retained);
-        try self.verifyPrintHelperIdentities();
+        return self.verifyWithIndexes(std.heap.page_allocator, true);
     }
 
     /// Each recorded method expression has one selected declared authority,
@@ -2366,8 +2366,36 @@ pub const Module = struct {
     }
 
     fn verifyValueActionsWithAllocator(self: Module, allocator: std.mem.Allocator) VerifyValueActionsError!void {
-        var expressions: std.AutoHashMapUnmanaged(*const Expr, void) = .empty;
-        defer expressions.deinit(allocator);
+        return self.verifyWithIndexes(allocator, false);
+    }
+
+    fn verifyWithIndexes(self: Module, allocator: std.mem.Allocator, comptime full: bool) (if (full) VerifyError else VerifyValueActionsError)!void {
+        var metadata: std.AutoHashMapUnmanaged(*const Expr, *const ExprMetadata) = .empty;
+        defer metadata.deinit(allocator);
+        for (self.expr_metadata) |*entry| {
+            const slot = try metadata.getOrPut(allocator, entry.expr);
+            if (slot.found_existing) return error.DuplicateExpressionMetadata;
+            slot.value_ptr.* = &entry.metadata;
+        }
+        var functions: std.AutoHashMapUnmanaged(identity.DeclId, usize) = .empty;
+        defer functions.deinit(allocator);
+        for (self.functions, 0..) |function, index| {
+            const slot = try functions.getOrPut(allocator, function.decl_id orelse continue);
+            if (!slot.found_existing) slot.value_ptr.* = index;
+        }
+        var indexed = self;
+        indexed.verification_metadata = &metadata;
+        indexed.verification_functions = &functions;
+        try indexed.verifyIndexedValueActions();
+        if (full) {
+            try indexed.verifyIntrinsicCalls();
+            try indexed.verifyCompilerIdentities();
+            try indexed.verifyGenericRequirementsWithMetadata(indexed.expr_metadata_retained);
+            try indexed.verifyPrintHelperIdentities();
+        }
+    }
+
+    fn verifyIndexedValueActions(self: Module) VerifyValueActionsError!void {
         for (self.expr_metadata) |entry| {
             if (!entry.metadata.semantics.isValid() or !entry.metadata.consumption.isValid(entry.metadata.semantics)) {
                 return error.InvalidExpressionMetadata;
@@ -3099,8 +3127,6 @@ pub const Module = struct {
                 };
                 if (!metadata_effect_site) return error.InvalidCheckedEffect;
             }
-            const seen = try expressions.getOrPut(allocator, entry.expr);
-            if (seen.found_existing) return error.DuplicateExpressionMetadata;
         }
         for (self.globals) |global| {
             if (global.init) |init| try self.verifyExprSink(init, .initialize);
@@ -3116,10 +3142,14 @@ pub const Module = struct {
             return;
         };
         var callee: ?Function = null;
-        for (self.functions) |function| {
-            if (function.decl_id == callee_id) {
-                callee = function;
-                break;
+        if (self.verification_functions) |index| {
+            if (index.get(callee_id)) |position| callee = self.functions[position];
+        } else {
+            for (self.functions) |function| {
+                if (function.decl_id == callee_id) {
+                    callee = function;
+                    break;
+                }
             }
         }
         const function = callee orelse {
@@ -7410,6 +7440,8 @@ fn testVerifierDuplicateIndexes(allocator: std.mem.Allocator) !void {
     const functions = [_]Function{.{ .decl_id = callee, .owner = null, .name = "read", .params = &.{}, .return_type_id = type_id, .body = &.{} }};
     module.functions = &functions;
     module.expr_metadata = &call_metadata;
+    // Exercise both verifier indexes and every allocation-failure cleanup path.
+    try module.verifyValueActionsWithAllocator(allocator);
     // Each pair models two specializations of one source use.
     try module.verifyGenericRequirementsWithAllocator(allocator, true);
     calls[39].call.checked_method_use.?.source_offset = 999;

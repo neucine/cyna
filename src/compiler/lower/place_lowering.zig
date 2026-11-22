@@ -556,6 +556,16 @@ pub fn lowerIndexPlacePointer(
     base: PlacePointer,
     index_expr: *sir.Expr,
 ) LowerError!PlacePointer {
+    // A borrowed array local stores a pointer; index the pointee storage.
+    if (self.mb.types.items[base.ty] == .pointer) {
+        const target = self.mb.types.items[base.ty].pointer;
+        if (self.mb.types.items[target] == .array) {
+            return lowerIndexPlacePointer(self, .{
+                .ptr_value = try self.emit(.{ .load = base.ptr_value }, base.ty),
+                .ty = target,
+            }, index_expr);
+        }
+    }
     const index_value = try @TypeOf(self.*).lowerExprForTarget(self, index_expr, self.mb.i64_type);
     return switch (self.mb.types.items[base.ty]) {
         .array => |array_ty| blk: {

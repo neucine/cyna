@@ -569,3 +569,17 @@ test "LIR hands off resource locals captured by struct literal fields" {
     try std.testing.expect(std.mem.indexOf(u8, text, "handoff values: source cleanup suppressed") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "auto_drop values at return (") == null);
 }
+
+test "LIR lowers indexed writes through borrowed fixed arrays" {
+    const source =
+        \\fn fill(output: &[8]usize): void { output[0] = 3; output[7] = 5; }
+        \\fn main(): i32 {
+        \\    var values: [8]usize = [0] ** 8;
+        \\    fill(&values);
+        \\    return (values[0] + values[7]) as i32;
+        \\}
+    ;
+    const text = try lir_support.lowerLirText(std.testing.allocator, "borrowed_array_write.cy", source);
+    defer std.testing.allocator.free(text);
+    try std.testing.expect(std.mem.indexOf(u8, text, "index_ptr") != null);
+}
