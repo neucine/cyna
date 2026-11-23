@@ -6,5 +6,6 @@ test {
     _ = @import("distribution_paths.zig");
     _ = @import("build/build_cache.zig");
     _ = @import("build/toolchain.zig");
+    _ = @import("build/native.zig");
     _ = @import("commands/module_build.zig");
 }

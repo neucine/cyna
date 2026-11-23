@@ -31,7 +31,16 @@ int main(int argc, char **argv) {
         args[2] = "-target";
         args[3] = "x86_64-windows-gnu";
     }
-    for (int i = 1; i < argc; ++i) args[i + offset] = argv[i];
+    for (int i = 1; i < argc; ++i) {
+        // Zig's target parser omits LLVM's vendor component. Keep the
+        // canonical LLVM spelling for IR, and translate it for Zig's GNU
+        // headers, CRT and linker driver.
+        args[i + offset] = argv[i];
+        if (!llvm_ir && strcmp(argv[i], "--target=x86_64-pc-windows-gnu") == 0)
+            args[i + offset] = "--target=x86_64-windows-gnu";
+        if (!llvm_ir && strcmp(argv[i], "--target=x86_64-unknown-linux-gnu") == 0)
+            args[i + offset] = "--target=x86_64-linux-gnu";
+    }
     int result = _spawnv(_P_WAIT, driver, (const char *const *)args);
     if (result == -1) perror(driver);
     free(args);

@@ -265,6 +265,24 @@ pub const supported_targets = [_]SupportedTarget{
         .supports_emit = .{ .obj = true },
     },
     .{
+        .name = "x86_64-unknown-linux-gnu",
+        .toolchain_target = "x86_64-unknown-linux-gnu",
+        .llvm_tool_bundle = "llvm",
+        .target_support = .{ .id = "x86_64-unknown-linux-gnu", .revision = 1 },
+        .toolchain_family = .llvm,
+        .freestanding = false,
+        .supports_emit = .{ .obj = true },
+    },
+    .{
+        .name = "x86_64-pc-windows-gnu",
+        .toolchain_target = "x86_64-pc-windows-gnu",
+        .llvm_tool_bundle = "llvm",
+        .target_support = .{ .id = "x86_64-pc-windows-gnu", .revision = 1 },
+        .toolchain_family = .llvm,
+        .freestanding = false,
+        .supports_emit = .{ .obj = true },
+    },
+    .{
         .name = "aarch64-none-elf",
         .toolchain_target = "aarch64-none-elf",
         .llvm_tool_bundle = "llvm",
@@ -615,10 +633,21 @@ pub fn isFreestandingTarget(target: ?[]const u8) bool {
 }
 
 pub fn supportedTarget(target: ?[]const u8) !?SupportedTarget {
+    return supportedTargetForHost(target, supportedHost());
+}
+
+fn supportedTargetForHost(target: ?[]const u8, host: ToolchainHost) !?SupportedTarget {
     const value = target orelse "native";
+    const resolved_host: ToolchainHost = if (std.mem.eql(u8, value, "aarch64-apple-darwin")) .aarch64_apple_darwin else host;
     var spec = supportedTargetByName(value) orelse return error.UnsupportedTarget;
     if (std.mem.eql(u8, spec.name, "native")) {
-        spec.target_support.id = toolchainHostTag(supportedHost());
+        spec.target_support.id = toolchainHostTag(resolved_host);
+        // Darwin uses the SDK selected by the driver; GNU hosts must override Clang's
+        // default, which can otherwise select the MSVC ABI on Windows.
+        spec.toolchain_target = switch (resolved_host) {
+            .aarch64_apple_darwin => null,
+            .x86_64_unknown_linux_gnu, .x86_64_pc_windows_gnu => toolchainHostTag(resolved_host),
+        };
     }
     return spec;
 }
@@ -651,9 +680,7 @@ pub fn supportedTargetSupport(target: ?[]const u8) !TargetSupportSpec {
     return spec.target_support;
 }
 
-// Accepted target spellings that resolve to a canonical supported target.
-// The hosted Darwin triple names the native host toolchain explicitly so that
-// target-specific ABI coverage can request it by platform name.
+// Darwin names the native SDK toolchain explicitly without requiring a triple.
 const target_name_aliases = [_]struct { alias: []const u8, canonical: []const u8 }{
     .{ .alias = "aarch64-apple-darwin", .canonical = "native" },
 };
@@ -2167,7 +2194,12 @@ test "supported targets normalize for toolchain use" {
     try std.testing.expectEqualStrings("aarch64-none-elf", aarch64);
 
     const native = try normalizedToolchainTarget(std.testing.allocator, "native");
-    try std.testing.expect(native == null);
+    defer if (native) |value| std.testing.allocator.free(value);
+    if (supportedHost() == .aarch64_apple_darwin) {
+        try std.testing.expect(native == null);
+    } else {
+        try std.testing.expectEqualStrings(toolchainHostTag(supportedHost()), native.?);
+    }
 }
 
 test "supported targets map to internal llvm tool bundles" {
@@ -2211,10 +2243,10 @@ test "supported targets expose separate target support identity" {
     try std.testing.expectEqual(@as(u32, 1), thumb_support.revision);
 }
 
-test "hosted darwin triple resolves to the native target without a toolchain triple" {
+test "hosted darwin triple keeps its target support without a toolchain triple" {
     const darwin = try supportedTarget("aarch64-apple-darwin");
     try std.testing.expectEqualStrings("native", darwin.?.name);
-    try std.testing.expectEqualStrings(toolchainHostTag(supportedHost()), darwin.?.target_support.id);
+    try std.testing.expectEqualStrings("aarch64-apple-darwin", darwin.?.target_support.id);
     try std.testing.expect(!darwin.?.freestanding);
     try std.testing.expectEqual(@as(?[]const u8, null), try normalizedToolchainTarget(std.testing.allocator, "aarch64-apple-darwin"));
     try std.testing.expect(!isFreestandingTarget("aarch64-apple-darwin"));
@@ -2644,4 +2676,20 @@ test "unsupported manifest categories report policy diagnostics" {
 
     try std.testing.expectError(error.InvalidManifest, resolveBuildTargetForConfigWithDiagnostics(std.testing.allocator, manifest_path, null, &diagnostic_context));
     try std.testing.expect(std.mem.indexOf(u8, captured.items, "unsupported manifest key") != null);
+}
+
+test "hosted GNU targets and native hosts select a consistent ABI" {
+    for ([_]ToolchainHost{ .x86_64_unknown_linux_gnu, .x86_64_pc_windows_gnu }) |host| {
+        const triple = toolchainHostTag(host);
+        const explicit = (try supportedTarget(triple)).?;
+        try std.testing.expectEqualStrings(triple, explicit.toolchain_target.?);
+        try std.testing.expectEqualStrings(triple, explicit.target_support.id);
+        try std.testing.expect(!explicit.freestanding);
+        for ([_]?[]const u8{ null, "native" }) |name| {
+            const native = (try supportedTargetForHost(name, host)).?;
+            try std.testing.expectEqualStrings(triple, native.toolchain_target.?);
+            try std.testing.expectEqualStrings(triple, native.target_support.id);
+        }
+    }
+    try std.testing.expectError(error.UnsupportedTarget, supportedTarget("x86_64-pc-windows-msvc"));
 }

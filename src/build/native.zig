@@ -1391,7 +1391,8 @@ fn appendHostedDarwinSdkFlags(
     include_linker_flags: bool,
 ) !void {
     if (build_model.isFreestandingTarget(target.target)) return;
-    if (target.target != null and !std.mem.eql(u8, target.target.?, "aarch64-apple-darwin")) return;
+    const support = try build_model.supportedTargetSupport(target.target);
+    if (!std.mem.eql(u8, support.id, "aarch64-apple-darwin")) return;
     if (@import("builtin").os.tag != .macos) return;
 
     const sdk_path = try detectDarwinSdkPath(allocator) orelse return;
@@ -1975,7 +1976,7 @@ pub fn updateHostedLinkCacheIdentity(
     if (@import("builtin").os.tag == .linux and
         !(try hashLinuxImplicitLinkInputs(allocator, hasher, tools.cc.path, linker, target))) return false;
     if (@import("builtin").os.tag == .macos and
-        (target.target == null or std.mem.eql(u8, target.target.?, "aarch64-apple-darwin")))
+        std.mem.eql(u8, (try build_model.supportedTargetSupport(target.target)).id, "aarch64-apple-darwin"))
     {
         const sdk = try detectDarwinSdkPath(allocator) orelse return false;
         defer allocator.free(sdk);
@@ -2777,4 +2778,54 @@ test "append target flags disables AArch64 freestanding SIMD register allocation
     try std.testing.expectEqualStrings("--target=aarch64-none-elf", argv.items[0]);
     try std.testing.expectEqualStrings("-ffreestanding", argv.items[1]);
     try std.testing.expectEqualStrings("-mgeneral-regs-only", argv.items[2]);
+}
+
+test "append target flags selects hosted GNU ABI for compile and link" {
+    for ([_][]const u8{ "x86_64-pc-windows-gnu", "x86_64-unknown-linux-gnu" }) |triple| {
+        for ([_]bool{ false, true }) |link| {
+            var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+            defer arena.deinit();
+            const allocator = arena.allocator();
+            const target = build_model.BuildTarget{
+                .is_project = false,
+                .display_path = try allocator.dupe(u8, "main.cy"),
+                .root_dir = try allocator.dupe(u8, "."),
+                .source_path = try allocator.dupe(u8, "main.cy"),
+                .name = try allocator.dupe(u8, "app"),
+                .target = try allocator.dupe(u8, triple),
+            };
+            var argv: std.ArrayListUnmanaged([]const u8) = .empty;
+            try appendTargetFlags(allocator, &argv, target, link);
+            try std.testing.expectEqual(@as(usize, 1), argv.items.len);
+            try std.testing.expectEqualStrings(try std.fmt.allocPrint(allocator, "--target={s}", .{triple}), argv.items[0]);
+        }
+    }
+}
+
+test "explicit native Darwin target retains SDK compile and link flags" {
+    if (@import("builtin").os.tag != .macos) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    _ = try detectDarwinSdkPath(allocator) orelse return error.SkipZigTest;
+    var target = build_model.BuildTarget{
+        .is_project = false,
+        .display_path = try allocator.dupe(u8, "main.cy"),
+        .root_dir = try allocator.dupe(u8, "."),
+        .source_path = try allocator.dupe(u8, "main.cy"),
+        .name = try allocator.dupe(u8, "app"),
+    };
+    for ([_]bool{ false, true }) |link| {
+        target.target = null;
+        var implicit: std.ArrayListUnmanaged([]const u8) = .empty;
+        try appendTargetFlags(allocator, &implicit, target, link);
+        target.target = try allocator.dupe(u8, "native");
+        var explicit: std.ArrayListUnmanaged([]const u8) = .empty;
+        try appendTargetFlags(allocator, &explicit, target, link);
+        try std.testing.expect(implicit.items.len >= 2);
+        try std.testing.expectEqual(implicit.items.len, explicit.items.len);
+        for (implicit.items, explicit.items) |expected, actual| {
+            try std.testing.expectEqualStrings(expected, actual);
+        }
+    }
 }
