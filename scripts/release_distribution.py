@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -781,6 +782,24 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     return 0
 
 
+def snapshot_release_outputs(root: Path) -> dict[str, tuple[bytes, int]]:
+    """Keep the release build independent of compilers installed by CLI tests."""
+    binary = "bin/cyna.exe" if os.name == "nt" else "bin/cyna"
+    outputs = {}
+    for relative in (binary, "lib/libcyna.a", "lib/libcyna_std.a"):
+        path = root / "zig-out" / relative
+        outputs[relative] = (path.read_bytes(), path.stat().st_mode & 0o777)
+    return outputs
+
+
+def restore_release_outputs(root: Path, outputs: dict[str, tuple[bytes, int]]) -> None:
+    for relative, (contents, mode) in outputs.items():
+        path = root / "zig-out" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(contents)
+        path.chmod(mode)
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     root = repo_root()
     plan = read_state(root, "plan.json")
@@ -806,11 +825,15 @@ def cmd_verify(args: argparse.Namespace) -> int:
         verify_version(binary, version, cwd=root, env=env)
     else:
         run(RELEASE_BUILD_CMD, cwd=root, env=env)
+    built_outputs = snapshot_release_outputs(root)
     if not reuse_candidate_tests:
         run(release_test_command(env), cwd=root, env=env)
+    # CLI tests install debug compilers and runtime archives into zig-out.
+    # Package the original release build, without rebuilding it after tests.
+    restore_release_outputs(root, built_outputs)
     checkout_smoke(root, version, smoke_path, args.smoke_exit_code, env=env)
     stage_distribution(root, version, args.host, args.stage_dir, upload=False,
-                       prebuilt_binary=getattr(args, "prebuilt_binary", False))
+                       prebuilt_binary=True)
     archive = (root / args.stage_dir / version / f"{args.host}.tar.gz").resolve()
     with tempfile.TemporaryDirectory(prefix="cyna-release-test-home.") as test_home:
         bumped_env = staged_release_test_env(root, version, args.host, args.stage_dir, test_home)
@@ -818,6 +841,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             # The full suite already ran against this commit. Check the staged
             # toolchain with the fast lane and the packaged compiler smoke.
             run(release_test_command(bumped_env, "test-fast"), cwd=root, env=bumped_env)
+        restore_release_outputs(root, built_outputs)
         checkout_smoke(root, version, smoke_path, args.smoke_exit_code, env=bumped_env)
     if args.no_cava:
         cava = {
@@ -837,12 +861,15 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "recorded": utc_now(),
         }
     release_integration_gate(root, env)
+    restore_release_outputs(root, built_outputs)
+    binary_name = "bin/cyna.exe" if os.name == "nt" else "bin/cyna"
     verify = {
         "version": version,
         "host": args.host,
         "commit": git_head(root),
         "archive": str(archive),
         "sha256": archive_sha256(archive),
+        "compiler_sha256": hashlib.sha256(built_outputs[binary_name][0]).hexdigest(),
         "gates": GATES if not reuse_candidate_tests else [gate for gate in GATES if gate not in ("test", "staged-test")],
         "reused_candidate_tests": reuse_candidate_tests,
         "cava": cava,
