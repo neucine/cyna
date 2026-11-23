@@ -31,7 +31,7 @@ try {
 
     $payload = Join-Path $extracted $hostTriple
     if (-not (Test-Path -LiteralPath (Join-Path $payload 'bin/cyna.exe') -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $payload 'distribution.toml') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $payload 'manifest.toml') -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $payload 'llvm/bin') -PathType Container)) {
         throw 'The downloaded archive is not a complete Cyna Windows distribution.'
     }

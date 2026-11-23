@@ -11,6 +11,9 @@ I/O support.
 - The Windows compiler driver translates target names for its bundled GNU
   headers and runtime libraries. Release packaging uses the corrected driver
   source path.
+- The PowerShell installer validates the manifest included in the Windows ZIP.
+- Release packaging preserves the optimized compiler and runtime libraries
+  across the compiler test suite.
 - Explicit `target = "native"` builds on macOS retain the SDK flags used for
   C compilation and linking.
 

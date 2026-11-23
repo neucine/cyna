@@ -80,8 +80,30 @@ $stage = Join-Path (Get-Location) "dist\distributions\$releaseVersion\x86_64-pc-
 $smokeHome = Join-Path (Get-Location) 'dist\windows-smoke-home'
 if (Test-Path $smokeHome) { Remove-Item $smokeHome -Recurse -Force }
 $installed = Join-Path $smokeHome ".cyna\$releaseVersion"
-New-Item -ItemType Directory -Force $installed | Out-Null
-Copy-Item "$stage\*" $installed -Recurse -Force
+# Exercise the real installer against this archive. Only the download is
+# substituted; extraction, payload validation, activation, and launchers run.
+$installerArchive = Join-Path (Split-Path $stage) 'x86_64-pc-windows-gnu.zip'
+$previousInstallRoot = $env:CYNA_INSTALL_ROOT
+$previousDistributionUrl = $env:CYNA_DISTRIBUTION_URL
+$previousUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+function Invoke-WebRequest {
+    param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+    Copy-Item -LiteralPath $installerArchive -Destination $OutFile
+}
+try {
+    $env:CYNA_INSTALL_ROOT = Join-Path $smokeHome '.cyna'
+    $env:CYNA_DISTRIBUTION_URL = 'https://cyna-installer-smoke.invalid/distribution.zip'
+    & (Join-Path (Get-Location) 'scripts\install_distribution.ps1') -Version $releaseVersion
+    if (-not (Test-Path (Join-Path $installed 'bin\cyna.exe'))) { throw 'Windows installer did not activate the compiler' }
+    $activated = (Get-Content (Join-Path $smokeHome '.cyna\current.txt') -Raw).Trim()
+    if ($activated -ne $releaseVersion) { throw 'Windows installer activated another version' }
+    if (-not (Test-Path (Join-Path $smokeHome '.cyna\bin\cyna.cmd'))) { throw 'Windows installer did not create its launcher' }
+} finally {
+    $env:CYNA_INSTALL_ROOT = $previousInstallRoot
+    $env:CYNA_DISTRIBUTION_URL = $previousDistributionUrl
+    [Environment]::SetEnvironmentVariable('Path', $previousUserPath, 'User')
+    Remove-Item Function:Invoke-WebRequest
+}
 $env:HOME = $smokeHome
 $env:PATH = "$(Join-Path $installed 'bin');$(Join-Path $installed 'llvm\bin');$env:PATH"
 $versionCommand = '"{0}" version 2>&1' -f (Join-Path $installed 'bin\cyna.exe')
