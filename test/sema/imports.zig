@@ -47,6 +47,59 @@ test "relative free function imports resolve inside path dependency" {
     try std.testing.expect(sema.findFunction(module, "run") != null);
 }
 
+test "package type aliases and public signatures preserve owner identity" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try compat.dirMakePath(tmp.dir, "app/src");
+    try compat.dirMakePath(tmp.dir, "core/src");
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/cyna.toml", .data =
+        \\name = "identity_app"
+        \\entry = "src/lib.cy"
+        \\[dependencies]
+        \\identity_core = { path = "../core" }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/cyna.toml", .data =
+        \\name = "identity_core"
+        \\entry = "src/api.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/types.cy", .data =
+        \\pub enum E: i32 { a = 0 }
+        \\pub struct Box { pub tag: E; }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/api.cy", .data =
+        \\import { E, Box } from .types;
+        \\pub fn identity(value: E): E { return value; }
+        \\pub fn make(): Box { return Box { tag: E.a }; }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/facade.cy", .data =
+        \\import .types;
+        \\pub type PublicE = types.E;
+        \\pub type PublicBox = types.Box;
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/src/lib.cy", .data =
+        \\import { E, Box } from identity_core.types;
+        \\import { identity, make } from identity_core.api;
+        \\import { PublicE, PublicBox } from identity_core.facade;
+        \\pub fn original(value: E): Box { return make(); }
+        \\pub fn exposed(value: PublicE): PublicBox { return make(); }
+        \\pub fn run(): E {
+        \\    const e: PublicE = identity(E.a);
+        \\    const box: PublicBox = original(e);
+        \\    const owner: Box = box;
+        \\    return owner.tag;
+        \\}
+    });
+    const root = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "app/src/lib.cy");
+    defer std.testing.allocator.free(root);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, root);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, root, loaded.program);
+    defer module.deinit(std.testing.allocator);
+    const original = sema.findFunction(module, "original") orelse return error.TestExpectedEqual;
+    const exposed = sema.findFunction(module, "exposed") orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(original.params[0].type_id.?, exposed.params[0].type_id.?);
+}
+
 test "syntax roles respect imported generic method identities and visibility" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
