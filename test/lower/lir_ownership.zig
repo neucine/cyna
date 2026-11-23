@@ -36,11 +36,17 @@ test "LIR borrows string bytes receiver loaded from sequence view index place" {
 
     const text = try lir_support.lowerLirText(std.testing.allocator, "lir_string_bytes_sequence_view_index_share.cy", source);
     defer std.testing.allocator.free(text);
-
-    try std.testing.expect(std.mem.indexOf(u8, text, "index_ptr") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "sequence_cmp eq") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "call cyna_string_share_into(") == null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "string_view_owner") == null);
+    // Prelude helpers may share their own strings. Only the receiver path in
+    // Pool.contains must borrow without creating an owner.
+    const start = std.mem.indexOf(u8, text, "_contains(") orelse return error.TestUnexpectedResult;
+    const end = std.mem.indexOfPos(u8, text, start, "\nfn ") orelse text.len;
+    const body = text[start..end];
+    errdefer std.debug.print("Failing contains LIR:\n{s}\n", .{body});
+    try std.testing.expect(std.mem.indexOf(u8, body, "borrowed_projection string_receiver_from_place") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "_index(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "sequence_cmp eq") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "call cyna_string_share_into(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "string_view_owner") == null);
 }
 
 test "LIR shares string backing for plain value flow" {

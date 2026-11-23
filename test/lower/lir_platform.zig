@@ -646,11 +646,17 @@ test "LIR projects imported public struct globals by address" {
 
     const text = try lir_support.lowerLirFileText(std.testing.allocator, root_path);
     defer std.testing.allocator.free(text);
+    // Imported prelude functions can extract fields from their own values.
+    // The global projection in main must stay on the address path.
+    const start = std.mem.indexOf(u8, text, "fn main(") orelse return error.TestUnexpectedResult;
+    const end = std.mem.indexOfPos(u8, text, start, "\nfn ") orelse text.len;
+    const body = text[start..end];
+    errdefer std.debug.print("Failing main LIR:\n{s}\n", .{body});
 
     try std.testing.expect(std.mem.indexOf(u8, text, "pair: Pair = \"cyna_global_") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "global_addr cyna_global_") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "field_ptr") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "extract_field") == null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "global_addr cyna_global_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "field_ptr") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "extract_field") == null);
 }
 
 test "LIR preserves packed struct layout marker" {

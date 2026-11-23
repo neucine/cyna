@@ -59,7 +59,7 @@ $env:PATH = "$(Join-Path (Get-Location) '.tools/zig/0.17.0');$(Join-Path (Get-Lo
 Write-Host '--- Build binary'
 & zig build -Dtarget=x86_64-windows-gnu -Doptimize=fast
 if ($LASTEXITCODE -ne 0) { throw 'Cyna Windows build failed' }
-& zig cc scripts\buildkite\windows-clang-wrapper.c -O2 -o dist\windows-clang-wrapper.exe
+& zig cc .buildkite\scripts\windows-clang-wrapper.c -O2 -o dist\windows-clang-wrapper.exe
 if ($LASTEXITCODE -ne 0) { throw 'Windows Zig compiler driver build failed' }
 & cmd.exe /d /c '.\zig-out\bin\cyna.exe version 2>&1'
 $versionExitCode = $LASTEXITCODE
@@ -80,8 +80,30 @@ $stage = Join-Path (Get-Location) "dist\distributions\$releaseVersion\x86_64-pc-
 $smokeHome = Join-Path (Get-Location) 'dist\windows-smoke-home'
 if (Test-Path $smokeHome) { Remove-Item $smokeHome -Recurse -Force }
 $installed = Join-Path $smokeHome ".cyna\$releaseVersion"
-New-Item -ItemType Directory -Force $installed | Out-Null
-Copy-Item "$stage\*" $installed -Recurse -Force
+# Exercise the real installer against this archive. Only the download is
+# substituted; extraction, payload validation, activation, and launchers run.
+$installerArchive = Join-Path (Split-Path $stage) 'x86_64-pc-windows-gnu.zip'
+$previousInstallRoot = $env:CYNA_INSTALL_ROOT
+$previousDistributionUrl = $env:CYNA_DISTRIBUTION_URL
+$previousUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+function Invoke-WebRequest {
+    param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+    Copy-Item -LiteralPath $installerArchive -Destination $OutFile
+}
+try {
+    $env:CYNA_INSTALL_ROOT = Join-Path $smokeHome '.cyna'
+    $env:CYNA_DISTRIBUTION_URL = 'https://cyna-installer-smoke.invalid/distribution.zip'
+    & (Join-Path (Get-Location) 'scripts\install_distribution.ps1') -Version $releaseVersion
+    if (-not (Test-Path (Join-Path $installed 'bin\cyna.exe'))) { throw 'Windows installer did not activate the compiler' }
+    $activated = (Get-Content (Join-Path $smokeHome '.cyna\current.txt') -Raw).Trim()
+    if ($activated -ne $releaseVersion) { throw 'Windows installer activated another version' }
+    if (-not (Test-Path (Join-Path $smokeHome '.cyna\bin\cyna.cmd'))) { throw 'Windows installer did not create its launcher' }
+} finally {
+    $env:CYNA_INSTALL_ROOT = $previousInstallRoot
+    $env:CYNA_DISTRIBUTION_URL = $previousDistributionUrl
+    [Environment]::SetEnvironmentVariable('Path', $previousUserPath, 'User')
+    Remove-Item Function:Invoke-WebRequest
+}
 $env:HOME = $smokeHome
 $env:PATH = "$(Join-Path $installed 'bin');$(Join-Path $installed 'llvm\bin');$env:PATH"
 $versionCommand = '"{0}" version 2>&1' -f (Join-Path $installed 'bin\cyna.exe')
@@ -95,6 +117,52 @@ Set-Content -Path $simpleSource -Value 'fn main(): i32 { return 42; }' -Encoding
 if ($LASTEXITCODE -ne 0) { throw "Packaged Windows simple build returned $LASTEXITCODE" }
 & $simpleExe
 if ($LASTEXITCODE -ne 42) { throw "Packaged Windows simple executable returned $LASTEXITCODE, expected 42" }
+# Exercise LG-104 through the installed driver, including the GNU headers/CRT.
+$gnuProject = Join-Path (Get-Location) 'dist\windows-smoke-gnu'
+New-Item -ItemType Directory -Force $gnuProject | Out-Null
+Set-Content -Path (Join-Path $gnuProject 'main.cy') -Encoding Ascii -Value @'
+extern c("gnu_helper") fn gnu_helper(): c_int;
+fn main(): i32 { return gnu_helper() as i32; }
+'@
+Set-Content -Path (Join-Path $gnuProject 'helper.c') -Encoding Ascii -Value @'
+#include <math.h>
+#include <stdlib.h>
+#ifndef __MINGW32__
+#error Expected Windows GNU headers
+#endif
+extern int asm_helper(void);
+int gnu_helper(void) {
+    volatile double value = 4.0;
+    void *allocation = malloc(16);
+    if (!allocation) return 1;
+    free(allocation);
+    return (int)sqrt(value) + asm_helper();
+}
+'@
+Set-Content -Path (Join-Path $gnuProject 'helper.S') -Encoding Ascii -Value @'
+.text
+.globl asm_helper
+asm_helper:
+    movl $40, %eax
+    ret
+'@
+foreach ($gnuTarget in @('native', 'x86_64-pc-windows-gnu')) {
+    Set-Content -Path (Join-Path $gnuProject 'cyna.toml') -Encoding Ascii -Value @"
+name = "gnu-smoke"
+entry = "main.cy"
+[build]
+target = "$gnuTarget"
+[c]
+sources = ["helper.c"]
+[asm]
+sources = ["helper.S"]
+"@
+    $gnuExe = Join-Path $gnuProject "$gnuTarget.exe"
+    & (Join-Path $installed 'bin\cyna.exe') build $gnuProject --jobs 1 --verbose --output $gnuExe
+    if ($LASTEXITCODE -ne 0) { throw "Packaged Windows GNU build failed for $gnuTarget" }
+    & $gnuExe
+    if ($LASTEXITCODE -ne 42) { throw "Packaged Windows GNU executable returned $LASTEXITCODE for $gnuTarget" }
+}
 $readInput = Join-Path (Get-Location) 'dist\windows-smoke-input.txt'
 [System.IO.File]::WriteAllText($readInput, 'ok')
 $readSource = Join-Path (Get-Location) 'dist\windows-smoke-read.cy'

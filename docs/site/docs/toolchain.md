@@ -2,7 +2,7 @@
 
 The Cyna distribution contains the `cyna` compiler, its host LLVM/Clang tools,
 the bundled `std` package, and target-specific runtime and standard-library
-archives. Version 0.5.3 provides compiler hosts for Apple Silicon macOS,
+archives. Version 0.5.4 provides compiler hosts for Apple Silicon macOS,
 x86-64 Linux, and x86-64 Windows.
 
 ## Install and verify
@@ -16,11 +16,11 @@ cyna version
 ```
 
 The installer downloads the current host archive, installs it under
-`~/.cyna/0.5.3/`, and updates `~/.cyna/current` and `~/.cyna/bin/cyna`.
+`~/.cyna/0.5.4/`, and updates `~/.cyna/current` and `~/.cyna/bin/cyna`.
 Pass a version as an argument to install a specific release, for example:
 
 ```sh
-curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.3
+curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.4
 ```
 
 The installer also accepts an explicit host triple as its second argument.
@@ -35,10 +35,10 @@ cyna version
 ```
 
 The script downloads the Windows ZIP, checks its layout, installs it under
-`~/.cyna/0.5.3/`, and adds `~/.cyna/bin` to your user `PATH`. Open a new
+`~/.cyna/0.5.4/`, and adds `~/.cyna/bin` to your user `PATH`. Open a new
 PowerShell window to use `cyna` later. Set `CYNA_RELEASE_VERSION` to install
 a specific release or `CYNA_INSTALL_ROOT` for another location. You can also
-download the [Windows ZIP directly](https://downloads.cyna.dev/distributions/0.5.3/x86_64-pc-windows-gnu.zip).
+download the [Windows ZIP directly](https://downloads.cyna.dev/distributions/0.5.4/x86_64-pc-windows-gnu.zip).
 
 ## What is installed
 
@@ -65,6 +65,12 @@ targets `aarch64-none-elf`, `x86_64-none-elf`, `riscv64-none-elf`,
 `riscv32-none-elf`, `arm-none-eabi`, and `thumbv7em-none-eabi`.
 Server-only hosted targets such as `aarch64-unknown-linux-gnu` are out of
 scope.
+
+Use `target = "native"` (or omit it) to build for the host. Hosted targets
+also accept `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and
+`x86_64-pc-windows-gnu`. Windows builds use the GNU toolchain conventions;
+the Windows distribution includes the matching C headers and runtime libraries.
+Selecting a cross-target still requires its matching headers and link libraries.
 
 Select a target in a project's `cyna.toml`:
 

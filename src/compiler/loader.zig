@@ -226,6 +226,12 @@ const State = struct {
     const ResolvedImport = struct {
         package: PackageId,
         source_path: []const u8,
+        dependency_name: ?[]const u8 = null,
+    };
+
+    const DependencyImport = struct {
+        dependency_name: []const u8,
+        source_path: []const u8,
     };
 
     allocator: std.mem.Allocator,
@@ -406,15 +412,29 @@ const State = struct {
             return error.TestBlockOutsideTestFile;
         }
 
-        for (program.imports) |decl| {
-            const resolved = try self.resolveImport(source_name, decl);
+        var import_index: usize = 0;
+        while (import_index < program.imports.len) : (import_index += 1) {
+            const decl = &program.imports[import_index];
+            const resolved = try self.resolveImport(source_name, decl.*);
             defer self.allocator.free(resolved.source_path);
             if (self.dependency_observer) |observer| try observer.record(resolved.source_path);
-            try self.validateResolvedImport(source_name, decl, resolved);
+            try self.validateResolvedImport(source_name, decl.*, resolved);
+            const expected_module_name = if (resolved.dependency_name) |dependency_name|
+                if (decl.is_root_package)
+                    try std.mem.concat(self.allocator, u8, &.{ dependency_name, ".", decl.path })
+                else
+                    try self.allocator.dupe(u8, decl.path)
+            else
+                try self.allocator.dupe(u8, decl.path);
+            defer self.allocator.free(expected_module_name);
+            const canonical_import_path =
+                try self.allocator.dupe(u8, expected_module_name);
+            self.allocator.free(decl.path);
+            decl.path = canonical_import_path;
             switch (resolved.package) {
-                .bundled => try self.loadFile(resolved.source_path, decl.path),
-                .dependency => try self.loadFile(resolved.source_path, decl.path),
-                .root => try self.loadFile(resolved.source_path, decl.path),
+                .bundled => try self.loadFile(resolved.source_path, expected_module_name),
+                .dependency => try self.loadFile(resolved.source_path, expected_module_name),
+                .root => try self.loadFile(resolved.source_path, expected_module_name),
             }
         }
 
@@ -570,6 +590,7 @@ const State = struct {
                 return .{
                     .package = .dependency,
                     .source_path = try resolveImportPath(self.allocator, dep.source_root, decl.path),
+                    .dependency_name = dep.name,
                 };
             }
         }
@@ -580,10 +601,11 @@ const State = struct {
                     .source_path = path,
                 };
             }
-            if (try self.resolveDependencyImport(decl.path)) |path| {
+            if (try self.resolveDependencyImport(decl.path)) |dependency_import| {
                 return .{
                     .package = .dependency,
-                    .source_path = path,
+                    .source_path = dependency_import.source_path,
+                    .dependency_name = dependency_import.dependency_name,
                 };
             }
             if (self.manifest_root_dir != null) {
@@ -647,7 +669,7 @@ const State = struct {
         return false;
     }
 
-    fn resolveDependencyImport(self: *State, import_path: []const u8) !?[]const u8 {
+    fn resolveDependencyImport(self: *State, import_path: []const u8) !?DependencyImport {
         const dot_index = std.mem.indexOfScalar(u8, import_path, '.') orelse return null;
         const package_name = import_path[0..dot_index];
         const module_path = import_path[dot_index + 1 ..];
@@ -656,7 +678,10 @@ const State = struct {
         for (self.dependencies) |dep| {
             if (!std.mem.eql(u8, dep.name, package_name)) continue;
             const path = try resolveImportPath(self.allocator, dep.source_root, module_path);
-            return path;
+            return .{
+                .dependency_name = dep.name,
+                .source_path = path,
+            };
         }
         return null;
     }
@@ -1583,6 +1608,13 @@ test "nested relative import in a path dependency uses its own source root" {
     const loaded = try loadProgram(std.testing.allocator, entry);
     defer loaded.deinit(std.testing.allocator);
     try std.testing.expect(loaded.source_paths.len >= 3);
+    var other_name_canonical = false;
+    for (loaded.module_names) |module_name| {
+        if (std.mem.eql(u8, module_name, "repro_a.inner.other")) {
+            other_name_canonical = true;
+        }
+    }
+    try std.testing.expect(other_name_canonical);
 }
 
 test "loader parses dependency inline table with path and version" {
