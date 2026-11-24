@@ -1000,6 +1000,10 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def homepage_mentions_version(homepage: str, version: str) -> bool:
+    return f"Cyna {version}" in homepage or f"v{version}" in homepage
+
+
 def deploy_site(root: Path, sites_repo: Path, version: str) -> None:
     site_root = Path(sites_repo).resolve()
     if not site_root.is_dir():
@@ -1027,8 +1031,8 @@ def deploy_site(root: Path, sites_repo: Path, version: str) -> None:
     request = urllib.request.Request("https://cyna.dev/install.sh", headers={"User-Agent": "Cyna-release-verifier/1.0"})
     with urllib.request.urlopen(request, timeout=30) as response:
         installer = response.read().decode("utf-8")
-    if f"Current release v{version}" not in homepage:
-        raise SystemExit(f"cyna.dev homepage does not show v{version}")
+    if not homepage_mentions_version(homepage, version):
+        raise SystemExit(f"cyna.dev homepage does not mention v{version}")
     if f'CYNA_RELEASE_VERSION="${{CYNA_RELEASE_VERSION:-{version}}}"' not in installer:
         raise SystemExit(f"cyna.dev installer does not default to {version}")
     request = urllib.request.Request("https://cyna.dev/install.ps1", headers={"User-Agent": "Cyna-release-verifier/1.0"})

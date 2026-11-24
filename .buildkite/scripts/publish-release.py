@@ -86,10 +86,21 @@ def archives(version: str, platforms: list[dict], destination: Path) -> list[tup
     return result
 
 
+def parse_remote_tag(output: str, tag: str) -> str | None:
+    refs = {}
+    for line in output.splitlines():
+        commit, separator, ref = line.partition("\t")
+        if separator:
+            refs[ref] = commit
+    return refs.get(f"refs/tags/{tag}^{{}}") or refs.get(f"refs/tags/{tag}")
+
+
 def ensure_tag(version: str, commit: str) -> None:
     tag = f"v{version}"
-    run("git", "fetch", "origin", "--tags")
-    existing = run("git", "rev-parse", f"{tag}^{{commit}}", capture=True, missing_ok=True)
+    existing = parse_remote_tag(
+        run("git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}", capture=True),
+        tag,
+    )
     if existing:
         if existing != commit:
             raise SystemExit(f"{tag} already points to another commit")
@@ -142,17 +153,27 @@ def upload_latest(path: Path, key: str) -> None:
         raise SystemExit(f"latest object could not be verified: {key}")
 
 
+def release_for_tag(releases: list[dict], tag: str) -> dict | None:
+    return next((item for item in releases if item["tag_name"] == tag), None)
+
+
+def find_release(tag: str, wait_seconds: float = 0) -> dict | None:
+    # GitHub's release-by-tag endpoint returns 404 for draft releases.
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        releases = json.loads(run("gh", "api", "repos/neucine/cyna/releases?per_page=100", capture=True))
+        release = release_for_tag(releases, tag)
+        if release is not None or time.monotonic() >= deadline:
+            return release
+        time.sleep(1)
+
+
 def github_release(version: str, files: list[tuple[dict, Path]], manifest: Path, notes: Path) -> None:
     tag = f"v{version}"
-    def find_release() -> dict | None:
-        # GitHub's release-by-tag endpoint returns 404 for draft releases.
-        releases = json.loads(run("gh", "api", "repos/neucine/cyna/releases?per_page=100", capture=True))
-        return next((item for item in releases if item["tag_name"] == tag), None)
-
-    current = find_release()
+    current = find_release(tag)
     if current is None:
         run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", f"Cyna {version}", "--notes-file", str(notes))
-        current = find_release()
+        current = find_release(tag, wait_seconds=20)
     if current is None:
         raise SystemExit(f"GitHub release {tag} was not found after creation")
     assets = {asset["name"]: asset for asset in current["assets"]}
