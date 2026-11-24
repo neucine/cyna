@@ -20,7 +20,7 @@ pub enum MemoryOrder: i32 {
 
 @concurrency.shareable
 pub c struct Mutex {
-    raw: c_ulong;
+    raw: c_size_t;
 
     @concurrency.isolated
     pub fn init(): Mutex {
@@ -56,7 +56,7 @@ pub c struct Mutex {
 
 @concurrency.shareable
 pub c struct Condvar {
-    raw: c_ulong;
+    raw: c_size_t;
 
     @concurrency.isolated
     pub fn init(): Condvar {
@@ -92,7 +92,7 @@ pub c struct Condvar {
 
 @concurrency.shareable
 pub c struct SharedHandle {
-    raw: c_ulong;
+    raw: c_size_t;
 }
 
 @concurrency.shareable
@@ -489,7 +489,7 @@ pub fn concurrent_slot_map<T>(): ConcurrentSlotMap<T> {
 
 @concurrency.shareable
 pub c struct AtomicI32 {
-    raw: c_ulong;
+    raw: c_size_t;
 
     @concurrency.isolated
     pub fn init(value: i32): AtomicI32 {
@@ -535,7 +535,7 @@ pub c struct AtomicI32 {
 
 @concurrency.shareable
 pub c struct AtomicUsize {
-    raw: c_ulong;
+    raw: c_size_t;
 
     @concurrency.isolated
     pub fn init(value: usize): AtomicUsize {
@@ -581,7 +581,7 @@ pub c struct AtomicUsize {
 
 @concurrency.shareable
 pub c struct AtomicBool {
-    raw: c_ulong;
+    raw: c_size_t;
 
     @concurrency.isolated
     pub fn init(value: bool): AtomicBool {

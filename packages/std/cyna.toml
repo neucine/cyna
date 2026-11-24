@@ -56,13 +56,13 @@ c = ["std_path.c"]
 [[module]]
 name = "std.time"
 path = "std_time.cy"
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
 c = ["std_time.c"]
 
 [[module]]
 name = "std.math"
 path = "std_math.cy"
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
 c = ["std_math.c"]
 
 [[module]]
@@ -79,7 +79,7 @@ targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
 [[module]]
 name = "std.telemetry"
 path = "std_telemetry.cy"
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
 
 [[module]]
 name = "std.thread"
@@ -90,7 +90,7 @@ c = ["std_thread.c"]
 [[module]]
 name = "std.sync"
 path = "std_sync.cy"
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
 c = ["std_sync.c"]
 
 [[module]]

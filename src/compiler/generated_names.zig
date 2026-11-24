@@ -5,6 +5,7 @@ pub const closure_environment_local = "__cyna_env";
 pub const closure_environment_type_prefix = "__cyna_closure_env_";
 pub const arrow_callable_type = "__cyna_arrow_callable";
 pub const arrow_adapter_prefix = "__cyna_arrow_adapter_";
+pub const c_abi_adapter_prefix = "__cyna_c_abi_adapter_";
 /// Declared-contract stand-ins for generic binder method uses lowered at a
 /// definition site, where no concrete witness exists yet.
 pub const generic_contract_prefix = "__cyna_generic_contract_";

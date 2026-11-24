@@ -54,7 +54,7 @@ pub fn paramType(
 }
 
 pub fn usesCallableBoundary(function: lir.Function) bool {
-    return function.calling_convention == .c and (function.is_extern or function.is_export);
+    return function.calling_convention == .c;
 }
 
 pub fn isEntryResult(module: lir.Module, function: lir.Function) bool {
