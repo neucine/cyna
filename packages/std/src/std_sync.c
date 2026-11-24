@@ -29,31 +29,31 @@ typedef enum {
 } CynaMemoryOrder;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaMutex;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaCondvar;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaSharedHandle;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaArcHandle;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaAtomicI32;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaAtomicUsize;
 
 typedef struct {
-    unsigned long raw;
+    uintptr_t raw;
 } CynaAtomicBool;
 
 typedef struct {
@@ -65,7 +65,7 @@ typedef struct {
 typedef struct {
     void *ptr;
     const CynaTypeDesc *desc;
-    unsigned long ref_count;
+    size_t ref_count;
 } CynaArcBox;
 
 static int cyna_std_sync_is_power_of_two(size_t value) {
@@ -119,7 +119,7 @@ CynaMutex cyna_std_sync_mutex_init(void) {
         free(mutex);
         return (CynaMutex){ .raw = 0 };
     }
-    return (CynaMutex){ .raw = (unsigned long)(uintptr_t)mutex };
+    return (CynaMutex){ .raw = (uintptr_t)mutex };
 }
 
 bool cyna_std_sync_mutex_is_valid(CynaMutex mutex) {
@@ -164,7 +164,7 @@ CynaCondvar cyna_std_sync_condvar_init(void) {
         free(condvar);
         return (CynaCondvar){ .raw = 0 };
     }
-    return (CynaCondvar){ .raw = (unsigned long)(uintptr_t)condvar };
+    return (CynaCondvar){ .raw = (uintptr_t)condvar };
 }
 
 bool cyna_std_sync_condvar_is_valid(CynaCondvar condvar) {
@@ -211,7 +211,7 @@ CynaSharedHandle cyna_std_sync_shared_from_ptr(void *ptr) {
     }
     box->ptr = ptr;
     box->desc = NULL;
-    return (CynaSharedHandle){ .raw = (unsigned long)(uintptr_t)box };
+    return (CynaSharedHandle){ .raw = (uintptr_t)box };
 }
 
 CynaSharedHandle cyna_std_sync_share_boxed(const void *value, const CynaTypeDesc *desc) {
@@ -241,7 +241,7 @@ CynaSharedHandle cyna_std_sync_share_boxed(const void *value, const CynaTypeDesc
 
     box->ptr = payload;
     box->desc = desc;
-    return (CynaSharedHandle){ .raw = (unsigned long)(uintptr_t)box };
+    return (CynaSharedHandle){ .raw = (uintptr_t)box };
 }
 
 bool cyna_std_sync_shared_is_valid(CynaSharedHandle shared) {
@@ -302,7 +302,7 @@ CynaArcHandle cyna_std_sync_arc_new_boxed(const void *value, const CynaTypeDesc 
     box->ptr = payload;
     box->desc = desc;
     __atomic_store_n(&box->ref_count, 1UL, __ATOMIC_RELEASE);
-    return (CynaArcHandle){ .raw = (unsigned long)(uintptr_t)box };
+    return (CynaArcHandle){ .raw = (uintptr_t)box };
 }
 
 bool cyna_std_sync_arc_is_valid(CynaArcHandle arc) {
@@ -319,7 +319,7 @@ CynaArcHandle cyna_std_sync_arc_retain(CynaArcHandle arc) {
 CynaSyncStatus cyna_std_sync_arc_release(CynaArcHandle arc) {
     CynaArcBox *box = (CynaArcBox *)(uintptr_t)arc.raw;
     if (box == NULL) return CYNA_SYNC_INVALID_HANDLE;
-    unsigned long previous = __atomic_fetch_sub(&box->ref_count, 1UL, __ATOMIC_ACQ_REL);
+    size_t previous = __atomic_fetch_sub(&box->ref_count, 1UL, __ATOMIC_ACQ_REL);
     if (previous == 1UL) {
         cyna_std_sync_drop_payload(box->ptr, box->desc);
         free(box);
@@ -337,7 +337,7 @@ CynaAtomicI32 cyna_std_sync_atomic_i32_init(int32_t value) {
     int32_t *cell = (int32_t *)malloc(sizeof(int32_t));
     if (cell == NULL) return (CynaAtomicI32){ .raw = 0 };
     __atomic_store_n(cell, value, __ATOMIC_RELAXED);
-    return (CynaAtomicI32){ .raw = (unsigned long)(uintptr_t)cell };
+    return (CynaAtomicI32){ .raw = (uintptr_t)cell };
 }
 
 bool cyna_std_sync_atomic_i32_is_valid_raw(CynaAtomicI32 cell) {
@@ -386,7 +386,7 @@ CynaAtomicUsize cyna_std_sync_atomic_usize_init(size_t value) {
     size_t *cell = (size_t *)malloc(sizeof(size_t));
     if (cell == NULL) return (CynaAtomicUsize){ .raw = 0 };
     __atomic_store_n(cell, value, __ATOMIC_RELAXED);
-    return (CynaAtomicUsize){ .raw = (unsigned long)(uintptr_t)cell };
+    return (CynaAtomicUsize){ .raw = (uintptr_t)cell };
 }
 
 bool cyna_std_sync_atomic_usize_is_valid_raw(CynaAtomicUsize cell) {
@@ -435,7 +435,7 @@ CynaAtomicBool cyna_std_sync_atomic_bool_init(bool value) {
     bool *cell = (bool *)malloc(sizeof(bool));
     if (cell == NULL) return (CynaAtomicBool){ .raw = 0 };
     __atomic_store_n(cell, value, __ATOMIC_RELAXED);
-    return (CynaAtomicBool){ .raw = (unsigned long)(uintptr_t)cell };
+    return (CynaAtomicBool){ .raw = (uintptr_t)cell };
 }
 
 bool cyna_std_sync_atomic_bool_is_valid_raw(CynaAtomicBool cell) {

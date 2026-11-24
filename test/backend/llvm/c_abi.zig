@@ -30,6 +30,63 @@ test "LLVM uses selected target C integer widths in C ABI signatures and cstruct
     try std.testing.expect(std.mem.indexOf(u8, text, "define i64 @bounce(i32 %arg0)") != null);
 }
 
+test "Windows C callbacks use an adapter for ordinary Cyna functions" {
+    const source =
+        \\c struct Pair {
+        \\    left: c_longlong;
+        \\    right: c_longlong;
+        \\}
+        \\
+        \\type PairCallback = c fn (
+        \\    context: *c_void,
+        \\    value: Pair,
+        \\    count: c_int,
+        \\    arguments: *const Pair
+        \\): Pair;
+        \\
+        \\extern {
+        \\    c("install") fn install(callback: PairCallback): void;
+        \\}
+        \\
+        \\fn callback(
+        \\    context: *c_void,
+        \\    value: Pair,
+        \\    count: c_int,
+        \\    arguments: *const Pair
+        \\): Pair {
+        \\    const ignored_context = context;
+        \\    const ignored_count = count;
+        \\    const ignored_arguments = arguments;
+        \\    return value;
+        \\}
+        \\
+        \\fn main(): i32 {
+        \\    install(callback);
+        \\    return 0;
+        \\}
+    ;
+
+    const text = try backend_support.lowerLlvmTextWithTarget(
+        std.testing.allocator,
+        "windows_c_callback_adapter.cy",
+        source,
+        "x86_64-pc-windows-gnu",
+    );
+    defer std.testing.allocator.free(text);
+
+    try std.testing.expect(std.mem.indexOf(u8, text, "__cyna_c_abi_adapter_0") != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "define void @cyna_fn_",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "ptr sret({ i64, i64 })",
+    ) != null);
+}
+
 test "Darwin AArch64 C ABI passes three-float struct as homogeneous aggregate" {
     const source =
         \\c struct Pixel { red: c_float; green: c_float; blue: c_float; }

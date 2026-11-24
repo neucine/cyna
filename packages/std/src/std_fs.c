@@ -39,12 +39,6 @@ typedef struct {
     uint8_t is_ok;
     uint8_t ok;
     int32_t err;
-} CynaResultBoolFsError;
-
-typedef struct {
-    uint8_t is_ok;
-    uint8_t ok;
-    int32_t err;
 } CynaResultVoidFsError;
 
 typedef struct {
@@ -154,22 +148,6 @@ static CynaResultStringFsError cyna_std_fs_result_string_err(CynaFsError err) {
     out.is_ok = 1;
     out.ok.ptr = NULL;
     out.ok.len = 0;
-    out.err = (int32_t)err;
-    return out;
-}
-
-static CynaResultBoolFsError cyna_std_fs_result_bool_ok(uint8_t value) {
-    CynaResultBoolFsError out;
-    out.is_ok = 0;
-    out.ok = value;
-    out.err = CYNA_FS_NOT_FOUND;
-    return out;
-}
-
-static CynaResultBoolFsError cyna_std_fs_result_bool_err(CynaFsError err) {
-    CynaResultBoolFsError out;
-    out.is_ok = 1;
-    out.ok = 0;
     out.err = (int32_t)err;
     return out;
 }
@@ -455,10 +433,10 @@ CynaResultVoidFsError cyna_std_fs_write_bytes_raw(CynaString path, CynaBytes dat
     return cyna_std_fs_result_void_ok();
 }
 
-CynaResultBoolFsError cyna_std_fs_exists(CynaString path) {
+int32_t cyna_std_fs_exists_status(CynaString path) {
     char *path_buf = cyna_path_buf(path);
     cyna_string_release(path);
-    if (path_buf == NULL) return cyna_std_fs_result_bool_err(CYNA_FS_IO_ERROR);
+    if (path_buf == NULL) return 5;
 #ifdef _WIN32
     int rc = _access(path_buf, 0);
 #else
@@ -466,9 +444,15 @@ CynaResultBoolFsError cyna_std_fs_exists(CynaString path) {
 #endif
     int err = errno;
     cyna_runtime_tracked_free(path_buf);
-    if (rc == 0) return cyna_std_fs_result_bool_ok(1);
-    if (err == ENOENT) return cyna_std_fs_result_bool_ok(0);
-    return cyna_std_fs_result_bool_err(cyna_map_fs_errno(err));
+    if (rc == 0) return 1;
+    if (err == ENOENT) return 0;
+    switch (cyna_map_fs_errno(err)) {
+        case CYNA_FS_NOT_FOUND: return 0;
+        case CYNA_FS_PERMISSION_DENIED: return 2;
+        case CYNA_FS_ALREADY_EXISTS: return 3;
+        case CYNA_FS_INVALID_PATH: return 4;
+        default: return 5;
+    }
 }
 
 CynaResultVoidFsError cyna_std_fs_create_dir(CynaString path) {

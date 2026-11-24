@@ -6635,6 +6635,25 @@ pub fn Owner(comptime host: anytype) type {
                                     .env_decl_id = null,
                                     .captures = &.{},
                                 } };
+                            } else if (expected_node.callable.calling_convention == .c and
+                                canonicalTypeNode(context, actual_type).callable.calling_convention == .cyna)
+                            {
+                                const adapter_name = try synthesizeCAbiCallableAdapter(
+                                    context,
+                                    allocator,
+                                    path,
+                                    program,
+                                    current_module,
+                                    function,
+                                    expected,
+                                    name.token,
+                                );
+                                out.* = .{ .function_ref = .{
+                                    .decl_id = maybeRegisteredDeclId(context, current_module, null, adapter_name, .function),
+                                    .module_name = current_module,
+                                    .owner = null,
+                                    .name = adapter_name,
+                                } };
                             } else {
                                 out.* = .{ .function_ref = .{
                                     .decl_id = resolved_function.id,
@@ -12973,6 +12992,138 @@ pub fn Owner(comptime host: anytype) type {
                 .is_extern = false,
                 .is_export = false,
                 .calling_convention = .cyna,
+                .params = params,
+                .return_type_id = return_type_id,
+                .debug_token = debug_token,
+                .body = body,
+            });
+
+            return name;
+        }
+
+        pub fn synthesizeCAbiCallableAdapter(
+            context: *SemaContext,
+            allocator: std.mem.Allocator,
+            path: []const u8,
+            program: ast.Program,
+            module_name: []const u8,
+            target: ast.Function,
+            function_type_id: semantic_types.TypeId,
+            debug_token: lexer.Token,
+        ) SemaError![]const u8 {
+            const function_type = canonicalTypeNode(context, function_type_id).callable;
+            const return_type_id = function_type.return_type;
+            const name = try std.fmt.allocPrint(allocator, "{s}{d}", .{
+                generated_names.c_abi_adapter_prefix,
+                context.anonymous_function_counter,
+            });
+            context.anonymous_function_counter += 1;
+            try context.output.generated_strings.append(allocator, name);
+
+            const params = try allocator.alloc(sir.Param, function_type.params.len);
+            errdefer allocator.free(params);
+
+            const args = try allocator.alloc(sir.CallArg, function_type.params.len);
+            var args_owned_by_call = false;
+            errdefer {
+                if (!args_owned_by_call) {
+                    for (args) |arg| arg.deinit(allocator);
+                    allocator.free(args);
+                }
+            }
+            for (function_type.params, 0..) |param_type_id, i| {
+                const param_name = try std.fmt.allocPrint(allocator, "{s}{d}", .{
+                    generated_names.anonymous_argument_prefix,
+                    i,
+                });
+                try context.output.generated_strings.append(allocator, param_name);
+                params[i] = .{
+                    .name = param_name,
+                    .binding_id = try nextBindingId(context),
+                    .type_id = param_type_id,
+                };
+                const arg_expr = try allocator.create(sir.Expr);
+                arg_expr.* = .{ .local = param_name };
+                var arg_typed = makeTypedExprFromId(arg_expr, param_type_id);
+                try finalizeAndRecordExprSemantics(
+                    context,
+                    path,
+                    program,
+                    module_name,
+                    &arg_typed,
+                );
+                try recordGeneratedBindingRoot(
+                    context,
+                    arg_expr,
+                    params[i].binding_id.?,
+                    false,
+                );
+                args[i] = .{ .value = arg_expr };
+            }
+
+            const call_expr = try allocator.create(sir.Expr);
+            errdefer call_expr.destroy(allocator);
+            call_expr.* = .{ .call = .{
+                .intrinsic_id = intrinsics.resolveDeclaration(
+                    target.module_name,
+                    target.owner,
+                    target.name,
+                ),
+                .decl_id = maybeRegisteredDeclId(
+                    context,
+                    target.module_name,
+                    target.owner,
+                    target.name,
+                    .function,
+                ),
+                .module_name = target.module_name,
+                .owner = target.owner,
+                .callee = target.name,
+                .args = args,
+            } };
+            try attachCheckedCallUse(
+                context,
+                call_expr,
+                return_type_id,
+                context.function_state.active_source_decl_id,
+                debug_token.offset,
+            );
+            var call_typed = makeTypedExprFromId(call_expr, return_type_id);
+            try finalizeAndRecordExprSemantics(
+                context,
+                path,
+                program,
+                module_name,
+                &call_typed,
+            );
+            if (!canonicalTypeIsVoidLike(context, return_type_id)) {
+                try recordExprSink(context, call_expr, .@"return");
+            }
+            args_owned_by_call = true;
+
+            const body = try allocator.alloc(sir.Stmt, 1);
+            errdefer allocator.free(body);
+            body[0] = if (canonicalTypeIsVoidLike(context, return_type_id))
+                .{ .expr = call_expr }
+            else
+                .{ .@"return" = call_expr };
+
+            const decl_id = (try registerGeneratedDecl(
+                context,
+                module_name,
+                null,
+                name,
+                .function,
+            )) orelse return error.SemanticFailed;
+            try context.generic.instantiated_functions.append(allocator, .{
+                .decl_id = decl_id,
+                .module_name = module_name,
+                .owner = null,
+                .name = name,
+                .abi_name = null,
+                .is_extern = false,
+                .is_export = false,
+                .calling_convention = .c,
                 .params = params,
                 .return_type_id = return_type_id,
                 .debug_token = debug_token,

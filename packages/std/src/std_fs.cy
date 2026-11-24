@@ -90,8 +90,27 @@ struct RawDirEntry {
 
 pub extern c fn read_file(path: string): string ! FsError;
 pub extern c fn read_bytes(path: string): [:]u8 ! FsError;
-pub extern c fn exists(path: string): bool ! FsError;
 pub extern c fn create_dir(path: string): void ! FsError;
+
+pub fn exists(path: string): bool ! FsError {
+    const status = exists_status(path);
+    if status == 0 {
+        return false;
+    }
+    if status == 1 {
+        return true;
+    }
+    if status == 2 {
+        throw FsError.permission_denied;
+    }
+    if status == 3 {
+        throw FsError.already_exists;
+    }
+    if status == 4 {
+        throw FsError.invalid_path;
+    }
+    throw FsError.io_error;
+}
 
 pub fn open_read(path: string): File ! FsError {
     const raw = try file_open_read_raw(path);
@@ -127,6 +146,7 @@ pub fn stderr(): Stderr {
 }
 
 extern {
+    c fn exists_status(path: string): c_int;
     c fn file_open_read_raw(path: string): c_size_t ! FsError;
     c fn file_open_write_raw(path: string): c_size_t ! FsError;
     c fn file_read_raw(handle: c_size_t, dest: []u8): usize ! io.IoError;

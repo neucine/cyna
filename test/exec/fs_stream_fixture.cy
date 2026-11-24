@@ -60,6 +60,12 @@ fn run(): i32 ! FsError {
     if written != 0 {
         return written;
     }
+    if not try fs.exists(path) {
+        return 10;
+    }
+    if try fs.exists($"{path}.missing") {
+        return 11;
+    }
     const read = try read_file(path);
     if read != 0 {
         return read;
