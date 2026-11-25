@@ -22,11 +22,33 @@ DOC_PAGES = {
     "CONCURRENCY": "concurrency",
     "SEMANTICS": "semantics",
     "RUNTIME": "runtime",
+    "STD_RUNTIME_API": "std-runtime-api",
     "PHILOSOPHY": "philosophy",
     "STATUS": "status",
     "BUILD": "build",
     "TOOLCHAIN": "toolchain",
     "GLOSSARY": "glossary",
+}
+
+API_PAGES = {
+    "PRELUDE": "std-prelude",
+    "ALLOC": "std-alloc",
+    "TESTING": "std-testing",
+    "MEM": "std-mem",
+    "IO": "std-io",
+    "JSON": "std-json",
+    "FS": "std-fs",
+    "PATH": "std-path",
+    "PROCESS": "std-process",
+    "TIME": "std-time",
+    "MATH": "std-math",
+    "CRYPTO": "std-crypto",
+    "CONFIG": "std-config",
+    "TELEMETRY": "std-telemetry",
+    "THREAD": "std-thread",
+    "SYNC": "std-sync",
+    "OWN": "std-own",
+    "RUNTIME_BOUNDARY": "std-runtime-boundary",
 }
 
 SEMVER_PATTERN = r"\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"
@@ -35,12 +57,21 @@ SITE_OWNED_PAGES = {"index.md", "language_gaps.md"}
 
 def rewrite_links(text: str) -> str:
     for source_name, site_slug in DOC_PAGES.items():
-        text = text.replace(f"]({source_name}.md", f"]({site_slug}.md")
+        for prefix in ("](", "](../", "](std/"):
+            text = text.replace(f"{prefix}{source_name}.md", f"]({site_slug}.md")
+    for source_name, site_slug in API_PAGES.items():
+        for prefix in ("](", "](std/"):
+            text = text.replace(f"{prefix}{source_name}.md", f"]({site_slug}.md")
     return text
 
 
 def expected_pages(version: str) -> set[str]:
-    return {f"{slug}.md" for slug in DOC_PAGES.values()} | SITE_OWNED_PAGES | {f"release-{version}.md"}
+    return (
+        {f"{slug}.md" for slug in DOC_PAGES.values()}
+        | {f"{slug}.md" for slug in API_PAGES.values()}
+        | SITE_OWNED_PAGES
+        | {f"release-{version}.md"}
+    )
 
 
 def prepare(source: Path, version: str, site: Path | None = None) -> None:
@@ -52,6 +83,10 @@ def prepare(source: Path, version: str, site: Path | None = None) -> None:
         text = (source / "docs" / f"{name}.md").read_text()
         if name == "SPEC":
             text = "---\noutline: [1, 4]\n---\n\n" + text
+        (docs / f"{slug}.md").write_text(rewrite_links(text))
+
+    for name, slug in API_PAGES.items():
+        text = (source / "docs" / "std" / f"{name}.md").read_text()
         (docs / f"{slug}.md").write_text(rewrite_links(text))
 
     release_name = version.replace(".", "_").replace("-", "_")

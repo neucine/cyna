@@ -6,12 +6,22 @@ pub enum FsError: i32 {
     already_exists,
     invalid_path,
     io_error,
+    invalid_mode,
 }
 
 pub enum DirEntryKind: i32 {
     file = 0,
     dir,
     other,
+}
+
+flags OpenMode: u8 {
+    read = 1,
+    write = 2,
+    create = 4,
+    truncate = 8,
+    append = 16,
+    create_new = 32,
 }
 
 pub struct DirEntry {
@@ -90,7 +100,6 @@ struct RawDirEntry {
 
 pub extern c fn read_file(path: string): string ! FsError;
 pub extern c fn read_bytes(path: string): [:]u8 ! FsError;
-pub extern c fn create_dir(path: string): void ! FsError;
 
 pub fn exists(path: string): bool ! FsError {
     const status = exists_status(path);
@@ -112,19 +121,30 @@ pub fn exists(path: string): bool ! FsError {
     throw FsError.io_error;
 }
 
-pub fn open_read(path: string): File ! FsError {
-    const raw = try file_open_read_raw(path);
+pub fn open(path: string, mode: OpenMode = OpenMode.read): File ! FsError {
+    const raw = try file_open_raw(path, mode as u8);
     return File {
         raw: raw
     };
 }
 
+pub fn open_read(path: string): File ! FsError {
+    return open(path, OpenMode.read);
+}
+
 // Creates or truncates a file. Call close to report any final flush failure.
 pub fn open_write(path: string): File ! FsError {
-    const raw = try file_open_write_raw(path);
-    return File {
-        raw: raw
-    };
+    return open(path, OpenMode.write | OpenMode.create | OpenMode.truncate);
+}
+
+pub fn mkdir(path: string, recursive: bool = false): void ! FsError {
+    try make_dir_raw(path, recursive);
+    return;
+}
+
+pub fn rmdir(path: string, recursive: bool = false): void ! FsError {
+    try remove_dir_raw(path, recursive);
+    return;
 }
 
 pub fn stdin(): Stdin {
@@ -147,8 +167,7 @@ pub fn stderr(): Stderr {
 
 extern {
     c fn exists_status(path: string): c_int;
-    c fn file_open_read_raw(path: string): c_size_t ! FsError;
-    c fn file_open_write_raw(path: string): c_size_t ! FsError;
+    c fn file_open_raw(path: string, mode: u8): c_size_t ! FsError;
     c fn file_read_raw(handle: c_size_t, dest: []u8): usize ! io.IoError;
     c fn file_write_raw(handle: c_size_t, data: []const u8): usize ! io.IoError;
     c fn file_close_raw(handle: c_size_t): void ! FsError;
@@ -160,6 +179,8 @@ extern {
     c fn open_dir(path: string): c_size_t ! FsError;
     c fn read_dir_next(handle: c_size_t): ?RawDirEntry ! FsError;
     c fn close_dir(handle: c_size_t): void;
+    c fn make_dir_raw(path: string, recursive: bool): void ! FsError;
+    c fn remove_dir_raw(path: string, recursive: bool): void ! FsError;
 }
 
 pub fn write_file(path: string, data: string): void ! FsError {
@@ -172,7 +193,7 @@ pub fn write_bytes(path: string, data: []const u8): void ! FsError {
     return;
 }
 
-pub fn read_dir(path: string): List<DirEntry>!FsError {
+pub fn ls(path: string = "."): List<DirEntry>!FsError {
     const handle = try open_dir(path);
     defer close_dir(handle);
     var entries: List<DirEntry> = list<DirEntry>();

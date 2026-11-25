@@ -65,7 +65,7 @@ test "std.json round-trips nested values and exposes ordered accessors" {
         \\                    return 6;
         \\                }}
         \\                switch items[1] {{
-        \\                .null_value => {{
+        \\                .null => {{
         \\                }}
         \\                _ => {{
         \\                    return 7;

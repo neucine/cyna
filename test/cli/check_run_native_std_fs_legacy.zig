@@ -138,10 +138,10 @@ test "native std.fs releases owned path arguments" {
         \\    try fs.write_bytes(output_path, bytes[..]);
         \\
         \\    const dir_path = owned("{s}".bytes());
-        \\    try fs.create_dir(dir_path);
+        \\    try fs.mkdir(dir_path);
         \\
         \\    const list_path = owned("{s}".bytes());
-        \\    const entries = try fs.read_dir(list_path);
+        \\    const entries = try fs.ls(list_path);
         \\    if entries.len() == 0 {{
         \\        return 4;
         \\    }}

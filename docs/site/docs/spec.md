@@ -544,11 +544,12 @@ read(path);
 read(path, 8192);
 ```
 
-Default values in this version are literal values: integers, floats, runes,
-strings, booleans, `none`, or a negated numeric literal. They cannot call
-functions, allocate, read declaration-time names, or depend on the caller's
-locals. This keeps the default visible at the declaration and prevents hidden
-cost.
+Default values in this version are literal values or a qualified enum or flags
+member: integers, floats, runes, strings, booleans, `none`, a negated numeric
+literal, or a member such as `OpenMode.read`. Enum and flags defaults resolve in
+the declaring module. Defaults cannot call functions, allocate, read
+declaration-time names, or depend on the caller's locals. This keeps the default
+visible at the declaration and prevents hidden cost.
 
 Calls may name arguments instead of relying on position. Named arguments may
 appear in any order, and a call may mix positional arguments first with named
@@ -6284,7 +6285,7 @@ pub enum Error: i32 {
 }
 
 pub union Value {
-    null_value;
+    null;
     bool: bool;
     number: Number;
     string: string;

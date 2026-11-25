@@ -41,7 +41,7 @@ test "emit-sir shows std.fs as hidden implementation ABI imports" {
 
     try std.testing.expect(std.mem.indexOf(u8, text.items, "extern c fn read_file(") != null);
     try std.testing.expect(std.mem.indexOf(u8, text.items, "= \"cyna_std_fs_read_file\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text.items, "fn read_dir(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text.items, "fn ls(") != null);
     try std.testing.expect(std.mem.indexOf(u8, text.items, "extern c fn open_dir(") != null);
     try std.testing.expect(std.mem.indexOf(u8, text.items, "= \"cyna_std_fs_open_dir\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, text.items, "extern c fn read_dir_next(") != null);

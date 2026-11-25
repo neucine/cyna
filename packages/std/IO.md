@@ -22,12 +22,13 @@ Implementations can map their own read or write failures to
 
 ## Files
 
-On hosted targets, `std.fs.open_read(path)` and `std.fs.open_write(path)`
-return an owned `File`. `open_write` creates or truncates the file. `File`
-implements both byte stream protocols, so it works with `read_to_end` and
-`write_all`. Opened files must be closed explicitly with `file.close()`;
-closing consumes the handle and reports a final flush failure. A mutable
-binding is needed when borrowing the file for a read or write.
+On hosted targets, `std.fs.open(path, mode)` returns an owned `File`.
+`open_read(path)` and `open_write(path)` are shorthands for common modes;
+`open_write` creates or truncates the file. `File` implements both byte stream
+protocols, so it works with `read_to_end` and `write_all`. Opened files must be
+closed explicitly with `file.close()`; closing consumes the handle and reports
+a final flush failure. A mutable binding is needed when borrowing the file for
+a read or write.
 
 ```cyna
 import std.fs;

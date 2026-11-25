@@ -295,5 +295,6 @@ with [docs/README.md](docs/README.md).
 - Toolchain and distribution notes: [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)
 - Project philosophy: [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)
 - Runtime and stdlib boundary notes: [docs/RUNTIME.md](docs/RUNTIME.md)
+- Standard library and runtime API: [docs/STD_RUNTIME_API.md](docs/STD_RUNTIME_API.md)
 - Hosted task, thread, and sync contracts: [docs/CONCURRENCY.md](docs/CONCURRENCY.md)
 - Brand assets: [docs/branding/README.md](docs/branding/README.md)

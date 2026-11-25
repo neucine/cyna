@@ -11,6 +11,8 @@
 #include <io.h>
 #endif
 #include <errno.h>
+#include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +24,7 @@ typedef enum {
     CYNA_FS_ALREADY_EXISTS = 2,
     CYNA_FS_INVALID_PATH = 3,
     CYNA_FS_IO_ERROR = 4,
+    CYNA_FS_INVALID_MODE = 5,
 } CynaFsError;
 
 typedef struct {
@@ -255,7 +258,20 @@ static int cyna_std_fs_prepare_binary_stream(FILE *file) {
     return 1;
 }
 
-static CynaResultHandleFsError cyna_std_fs_file_open(CynaString path, const char *mode) {
+static int cyna_std_fs_open_mode_valid(uint8_t mode) {
+    if ((mode & (uint8_t)~0x3Fu) != 0) return 0;
+    if ((mode & (1u | 2u)) == 0) return 0;
+    if ((mode & 2u) == 0 && (mode & (4u | 8u | 16u | 32u)) != 0) return 0;
+    if ((mode & 32u) != 0 && (mode & (4u | 8u)) != 0) return 0;
+    return 1;
+}
+
+CynaResultHandleFsError cyna_std_fs_file_open_raw(CynaString path, uint8_t mode) {
+    if (!cyna_std_fs_open_mode_valid(mode)) {
+        cyna_string_release(path);
+        return cyna_std_fs_result_handle_err(CYNA_FS_INVALID_MODE);
+    }
+
     const int64_t length = cyna_string_logical_len(path);
     if (length != 0 && memchr(path.ptr, 0, (size_t)length) != NULL) {
         cyna_string_release(path);
@@ -264,19 +280,52 @@ static CynaResultHandleFsError cyna_std_fs_file_open(CynaString path, const char
     char *path_buf = cyna_path_buf(path);
     cyna_string_release(path);
     if (path_buf == NULL) return cyna_std_fs_result_handle_err(CYNA_FS_IO_ERROR);
-    FILE *file = fopen(path_buf, mode);
+
+    const int readable = (mode & 1u) != 0;
+    const int writable = (mode & 2u) != 0;
+    const int append = (mode & 16u) != 0;
+    int flags;
+    const char *file_mode;
+    if (readable && writable) {
+        flags = O_RDWR;
+        file_mode = append ? "a+b" : "r+b";
+    } else if (writable) {
+        flags = O_WRONLY;
+        file_mode = append ? "ab" : "wb";
+    } else {
+        flags = O_RDONLY;
+        file_mode = "rb";
+    }
+    if ((mode & 32u) != 0) flags |= O_CREAT | O_EXCL;
+    else if ((mode & 4u) != 0) flags |= O_CREAT;
+    if ((mode & 8u) != 0) flags |= O_TRUNC;
+    if (append) flags |= O_APPEND;
+
+#ifdef _WIN32
+    flags |= _O_BINARY;
+    const int fd = _open(path_buf, flags, _S_IREAD | _S_IWRITE);
     const int saved_errno = errno;
     cyna_runtime_tracked_free(path_buf);
-    if (file == NULL) return cyna_std_fs_result_handle_err(cyna_map_fs_errno(saved_errno));
+    if (fd < 0) return cyna_std_fs_result_handle_err(cyna_map_fs_errno(saved_errno));
+    FILE *file = _fdopen(fd, file_mode);
+    const int fdopen_errno = errno;
+    if (file == NULL) {
+        _close(fd);
+        return cyna_std_fs_result_handle_err(cyna_map_fs_errno(fdopen_errno));
+    }
+#else
+    const int fd = open(path_buf, flags, 0666);
+    const int saved_errno = errno;
+    cyna_runtime_tracked_free(path_buf);
+    if (fd < 0) return cyna_std_fs_result_handle_err(cyna_map_fs_errno(saved_errno));
+    FILE *file = fdopen(fd, file_mode);
+    const int fdopen_errno = errno;
+    if (file == NULL) {
+        close(fd);
+        return cyna_std_fs_result_handle_err(cyna_map_fs_errno(fdopen_errno));
+    }
+#endif
     return cyna_std_fs_result_handle_ok((size_t)(uintptr_t)file);
-}
-
-CynaResultHandleFsError cyna_std_fs_file_open_read_raw(CynaString path) {
-    return cyna_std_fs_file_open(path, "rb");
-}
-
-CynaResultHandleFsError cyna_std_fs_file_open_write_raw(CynaString path) {
-    return cyna_std_fs_file_open(path, "wb");
 }
 
 CynaResultSizeIoError cyna_std_fs_file_read_raw(size_t handle, CynaBytes dest) {
@@ -455,18 +504,202 @@ int32_t cyna_std_fs_exists_status(CynaString path) {
     }
 }
 
-CynaResultVoidFsError cyna_std_fs_create_dir(CynaString path) {
+static int cyna_std_fs_path_separator(char byte) {
+#ifdef _WIN32
+    return byte == '/' || byte == '\\';
+#else
+    return byte == '/';
+#endif
+}
+
+static int cyna_std_fs_make_dir_one(const char *path) {
+#ifdef _WIN32
+    if (_mkdir(path) == 0) return 0;
+#else
+    if (mkdir(path, 0777) == 0) return 0;
+#endif
+    return errno;
+}
+
+static int cyna_std_fs_is_directory(const char *path) {
+#ifdef _WIN32
+    struct _stat status;
+    if (_stat(path, &status) != 0) return 0;
+    return (status.st_mode & _S_IFDIR) != 0;
+#else
+    struct stat status;
+    if (stat(path, &status) != 0) return 0;
+    return S_ISDIR(status.st_mode);
+#endif
+}
+
+static int cyna_std_fs_make_dir_recursive(const char *path) {
+    if (cyna_std_fs_is_directory(path)) return 0;
+
+    size_t len = strlen(path);
+    char *buffer = (char *)malloc(len + 1u);
+    if (buffer == NULL) return ENOMEM;
+    memcpy(buffer, path, len + 1u);
+
+    while (len > 1u && cyna_std_fs_path_separator(buffer[len - 1u])) {
+        buffer[--len] = '\0';
+    }
+
+    size_t start = 0;
+#ifdef _WIN32
+    if (len >= 2u && buffer[1] == ':') {
+        start = 2u;
+        if (start < len && cyna_std_fs_path_separator(buffer[start])) start += 1u;
+    }
+#else
+    if (len > 0u && cyna_std_fs_path_separator(buffer[0])) start = 1u;
+#endif
+
+    for (size_t index = start; index < len; index += 1u) {
+        if (!cyna_std_fs_path_separator(buffer[index])) continue;
+        const char saved = buffer[index];
+        buffer[index] = '\0';
+        if (index > start) {
+            const int err = cyna_std_fs_make_dir_one(buffer);
+            if (err != 0 && err != EEXIST) {
+                free(buffer);
+                return err;
+            }
+        }
+        buffer[index] = saved;
+    }
+
+    int err = cyna_std_fs_make_dir_one(buffer);
+    if (err == EEXIST && cyna_std_fs_is_directory(buffer)) err = 0;
+    free(buffer);
+    return err;
+}
+
+CynaResultVoidFsError cyna_std_fs_make_dir_raw(CynaString path, bool recursive) {
     char *path_buf = cyna_path_buf(path);
     cyna_string_release(path);
     if (path_buf == NULL) return cyna_std_fs_result_void_err(CYNA_FS_IO_ERROR);
-#ifdef _WIN32
-    int rc = _mkdir(path_buf);
-#else
-    int rc = mkdir(path_buf, 0777);
-#endif
-    int err = errno;
+    const int err = recursive
+        ? cyna_std_fs_make_dir_recursive(path_buf)
+        : cyna_std_fs_make_dir_one(path_buf);
     cyna_runtime_tracked_free(path_buf);
-    if (rc == 0) return cyna_std_fs_result_void_ok();
+    if (err == 0) return cyna_std_fs_result_void_ok();
+    return cyna_std_fs_result_void_err(cyna_map_fs_errno(err));
+}
+
+static int cyna_std_fs_join_path(char *out, size_t out_len, const char *parent, const char *name) {
+    const size_t parent_len = strlen(parent);
+    const size_t name_len = strlen(name);
+    const int needs_separator = parent_len != 0 && !cyna_std_fs_path_separator(parent[parent_len - 1u]);
+    if (parent_len + (size_t)needs_separator + name_len + 1u > out_len) return ENAMETOOLONG;
+    memcpy(out, parent, parent_len);
+    size_t offset = parent_len;
+#ifdef _WIN32
+    if (needs_separator) out[offset++] = '\\';
+#else
+    if (needs_separator) out[offset++] = '/';
+#endif
+    memcpy(out + offset, name, name_len + 1u);
+    return 0;
+}
+
+#ifdef _WIN32
+static int cyna_std_fs_remove_tree(const char *path) {
+    size_t len = strlen(path);
+    char *pattern = (char *)malloc(len + 3u);
+    if (pattern == NULL) return ENOMEM;
+    memcpy(pattern, path, len);
+    if (len != 0u && !cyna_std_fs_path_separator(pattern[len - 1u])) pattern[len++] = '\\';
+    pattern[len++] = '*';
+    pattern[len] = '\0';
+
+    struct _finddata_t entry;
+    intptr_t search = _findfirst(pattern, &entry);
+    int err = errno;
+    free(pattern);
+    if (search == -1) {
+        if (err == ENOENT) return 0;
+        return err;
+    }
+
+    for (;;) {
+        if (strcmp(entry.name, ".") != 0 && strcmp(entry.name, "..") != 0) {
+            const size_t child_len = strlen(path) + strlen(entry.name) + 2u;
+            char *child = (char *)malloc(child_len);
+            if (child == NULL) {
+                err = ENOMEM;
+                break;
+            }
+            const int join_err = cyna_std_fs_join_path(child, child_len, path, entry.name);
+            if (join_err != 0) {
+                free(child);
+                err = join_err;
+                break;
+            }
+            if ((entry.attrib & _A_SUBDIR) != 0) err = cyna_std_fs_remove_tree(child);
+            else err = _unlink(child) == 0 ? 0 : errno;
+            free(child);
+            if (err != 0) break;
+        }
+        if (_findnext(search, &entry) != 0) {
+            err = errno == ENOENT ? 0 : errno;
+            break;
+        }
+    }
+    _findclose(search);
+    if (err != 0) return err;
+    return _rmdir(path) == 0 ? 0 : errno;
+}
+#else
+static int cyna_std_fs_remove_tree(const char *path) {
+    struct stat status;
+    if (lstat(path, &status) != 0) return errno;
+    if (!S_ISDIR(status.st_mode)) return ENOTDIR;
+
+    DIR *dir = opendir(path);
+    if (dir == NULL) return errno;
+    int err = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        const size_t child_len = strlen(path) + strlen(entry->d_name) + 2u;
+        char *child = (char *)malloc(child_len);
+        if (child == NULL) {
+            err = ENOMEM;
+            break;
+        }
+        const int join_err = cyna_std_fs_join_path(child, child_len, path, entry->d_name);
+        if (join_err != 0) {
+            free(child);
+            err = join_err;
+            break;
+        }
+        err = cyna_std_fs_remove_tree(child);
+        free(child);
+        if (err != 0) break;
+    }
+    if (closedir(dir) != 0 && err == 0) err = errno;
+    if (err == 0 && rmdir(path) != 0) err = errno;
+    return err;
+}
+#endif
+
+CynaResultVoidFsError cyna_std_fs_remove_dir_raw(CynaString path, bool recursive) {
+    char *path_buf = cyna_path_buf(path);
+    cyna_string_release(path);
+    if (path_buf == NULL) return cyna_std_fs_result_void_err(CYNA_FS_IO_ERROR);
+    int err;
+    if (recursive) {
+        err = cyna_std_fs_remove_tree(path_buf);
+    } else {
+#ifdef _WIN32
+        err = _rmdir(path_buf) == 0 ? 0 : errno;
+#else
+        err = rmdir(path_buf) == 0 ? 0 : errno;
+#endif
+    }
+    cyna_runtime_tracked_free(path_buf);
+    if (err == 0) return cyna_std_fs_result_void_ok();
     return cyna_std_fs_result_void_err(cyna_map_fs_errno(err));
 }
 

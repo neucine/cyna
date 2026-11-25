@@ -130,6 +130,28 @@ test "string and bool default values lower at the call site" {
     try expectNamedNative("named_string_bool_defaults", source, 42);
 }
 
+test "flags member defaults resolve in the declaring module" {
+    const source =
+        \\flags Mode: u8 {
+        \\    read = 1,
+        \\    write = 2,
+        \\}
+        \\
+        \\fn selected(mode: Mode = Mode.read): i32 {
+        \\    if mode == Mode.read {
+        \\        return 42;
+        \\    }
+        \\    return 1;
+        \\}
+        \\
+        \\fn main(): i32 {
+        \\    return selected();
+        \\}
+    ;
+
+    try expectNamedNative("named_flags_default", source, 42);
+}
+
 test "namespace functions accept defaults and named arguments" {
     const source =
         \\struct Point {

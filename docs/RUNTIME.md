@@ -6,6 +6,9 @@ The bundled `std` package provides the source-level APIs. Ordinary programs
 import `std` modules and let `cyna build` link the runtime; they do not call
 compiler/runtime bridge symbols directly.
 
+The public source-level API is listed in
+[standard library and runtime API](STD_RUNTIME_API.md).
+
 ## What is linked
 
 For each supported target, the installed distribution contains `libcyna.a`
