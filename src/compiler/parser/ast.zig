@@ -386,10 +386,12 @@ pub const FieldDecl = struct {
 pub const Param = struct {
     name: []const u8,
     type_name: TypeName,
+    default_value: ?*Expr = null,
     name_token: lexer.Token,
 
     pub fn deinit(self: Param, allocator: std.mem.Allocator) void {
         self.type_name.deinit(allocator);
+        if (self.default_value) |value| value.destroy(allocator);
     }
 };
 
@@ -1119,13 +1121,13 @@ pub const MethodCall = struct {
     args: []CallArg,
 };
 
-pub const CallArg = union(enum) {
+pub const CallArg = struct {
     value: *Expr,
+    name: ?[]const u8 = null,
+    name_token: ?lexer.Token = null,
 
     pub fn deinit(self: CallArg, allocator: std.mem.Allocator) void {
-        switch (self) {
-            .value => |expr| expr.destroy(allocator),
-        }
+        self.value.destroy(allocator);
     }
 };
 

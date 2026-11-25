@@ -3161,7 +3161,13 @@ pub const Module = struct {
         var cursor: usize = 0;
         var site_cursor: usize = 0;
         const check_sites = call.checked_method_use != null;
-        for (call.args, function.params, 0..) |arg, param, index| {
+        if (call.evaluation_order.len != 0 and call.evaluation_order.len != call.args.len) return error.InvalidCheckedEffect;
+        var evaluation_cursor: usize = 0;
+        while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+            const index: usize = if (call.evaluation_order.len != 0) call.evaluation_order[evaluation_cursor] else evaluation_cursor;
+            if (index >= call.args.len) return error.InvalidCheckedEffect;
+            const arg = call.args[index];
+            const param = function.params[index];
             const expr = switch (arg) {
                 .value => |value| value,
             };
@@ -4805,6 +4811,7 @@ pub const Expr = union(enum) {
             .call => |call| {
                 for (call.args) |arg| arg.deinit(allocator);
                 allocator.free(call.args);
+                if (call.evaluation_order_owned) allocator.free(call.evaluation_order);
                 if (call.checked_arguments_owned) allocator.free(call.checked_arguments);
                 if (call.checked_evaluation_sites_owned) allocator.free(call.checked_evaluation_sites);
                 if (call.checked_method_use) |use| {
@@ -5271,6 +5278,8 @@ pub const Call = struct {
     owner: ?[]const u8,
     callee: []const u8,
     args: []const CallArg,
+    evaluation_order: []const u32 = &.{},
+    evaluation_order_owned: bool = false,
     checked_arguments: []const Record = &.{},
     checked_arguments_owned: bool = false,
     checked_result_effect: ?Record = null,

@@ -1719,12 +1719,15 @@ const Parser = struct {
                 const name = try self.expect(.identifier, "expected parameter name");
                 _ = try self.expect(.colon, "expected `:` after parameter name");
                 const type_name = try self.parseTypeName("expected parameter type");
+                const default_value = if (self.match(.equal)) try self.parseExpr() else null;
                 params.append(self.allocator, .{
                     .name = name.lexeme,
                     .type_name = type_name,
+                    .default_value = default_value,
                     .name_token = name,
                 }) catch |err| {
                     type_name.deinit(self.allocator);
+                    if (default_value) |value| value.destroy(self.allocator);
                     return err;
                 };
 
@@ -5054,7 +5057,17 @@ const Parser = struct {
         if (self.check(.r_paren)) return;
 
         while (true) {
-            try args.append(self.allocator, .{ .value = try self.parseExpr() });
+            if (self.check(.identifier) and self.peekAhead(1).tag == .equal) {
+                const name = self.advance();
+                _ = try self.expect(.equal, "expected `=` after argument name");
+                try args.append(self.allocator, .{
+                    .value = try self.parseExpr(),
+                    .name = name.lexeme,
+                    .name_token = name,
+                });
+            } else {
+                try args.append(self.allocator, .{ .value = try self.parseExpr() });
+            }
             if (!self.match(.comma)) break;
         }
     }

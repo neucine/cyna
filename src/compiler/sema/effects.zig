@@ -919,7 +919,13 @@ pub fn Owner(comptime host: anytype) type {
                 defer transfer_records.deinit(allocator);
                 var sites: std.ArrayListUnmanaged(sir.CallEvaluationSite) = .empty;
                 defer sites.deinit(allocator);
-                for (call.args, function.params, 0..) |arg, param, index| {
+                if (call.evaluation_order.len != 0 and call.evaluation_order.len != call.args.len) return error.SemanticFailed;
+                var cursor: usize = 0;
+                while (cursor < call.args.len) : (cursor += 1) {
+                    const index: usize = if (call.evaluation_order.len != 0) call.evaluation_order[cursor] else cursor;
+                    if (index >= call.args.len) return error.SemanticFailed;
+                    const arg = call.args[index];
+                    const param = function.params[index];
                     const expr = switch (arg) {
                         .value => |value| value,
                     };

@@ -755,7 +755,7 @@ test "closure capture effect allocation failures release records" {
     defer std.testing.allocator.free(tokens);
     const program = try parser.parse(std.testing.allocator, "effect_closure_capture_oom.cy", source, tokens);
     defer program.deinit(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, compileGenericShapeContract, .{program});
+    try checkAllocationFailuresUpTo(std.testing.allocator, compileGenericShapeContract, .{program}, std.math.maxInt(usize));
 }
 
 test "generic shape contract allocation failures release analysis and requirement outputs" {
