@@ -1,4 +1,5 @@
 const type_resolution = @import("type_resolution.zig");
+const call_normalization = @import("call_normalization.zig");
 const declarations = @import("declarations.zig");
 const protocols = @import("protocols.zig");
 const package_manifest = @import("../package.zig");
@@ -1584,7 +1585,27 @@ pub fn Owner(comptime host: anytype) type {
             var params: std.ArrayListUnmanaged(sir.Param) = .empty;
             errdefer params.deinit(allocator);
 
+            var saw_default = false;
             for (function.params) |param| {
+                if (param.default_value != null) {
+                    if (function.is_extern or function.is_export or function.calling_convention != .cyna) {
+                        try context.diagnostic_context.emitToken(path, param.name_token, "extern and exported functions cannot declare parameter defaults", .{});
+                        return SemaError.SemanticFailed;
+                    }
+                    const is_method = function.params.len != 0 and std.mem.eql(u8, function.params[0].name, "self");
+                    if (is_method) {
+                        try context.diagnostic_context.emitToken(path, param.name_token, "method parameters cannot declare defaults yet", .{});
+                        return SemaError.SemanticFailed;
+                    }
+                    if (!call_normalization.defaultExpressionSupported(param.default_value.?)) {
+                        try context.diagnostic_context.emitToken(path, param.name_token, "parameter defaults must be literal values", .{});
+                        return SemaError.SemanticFailed;
+                    }
+                    saw_default = true;
+                } else if (saw_default) {
+                    try context.diagnostic_context.emitToken(path, param.name_token, "parameters with defaults must form a trailing suffix", .{});
+                    return SemaError.SemanticFailed;
+                }
                 const param_type = try parseCanonicalType(context, path, program, function.module_name, param.type_name);
                 if (findLocal(locals.items, param.name) != null) {
                     try context.diagnostic_context.emitToken(path, param.name_token, "duplicate parameter `{s}`", .{param.name});
@@ -7810,6 +7831,35 @@ pub fn Owner(comptime host: anytype) type {
             return makeTypedExprFromId(out, result_type_id);
         }
 
+        fn hasNamedCallArguments(args: []const ast.CallArg) bool {
+            for (args) |arg| {
+                if (arg.name != null) return true;
+            }
+            return false;
+        }
+
+        fn callNeedsNormalization(parameters: []const ast.Param, args: []const ast.CallArg) bool {
+            if (parameters.len != args.len) return true;
+            return hasNamedCallArguments(args);
+        }
+
+        fn evaluationParameterIndex(order: []const u32, cursor: usize) usize {
+            return if (order.len != 0) order[cursor] else cursor;
+        }
+
+        fn rejectNamedCallArguments(
+            context: *SemaContext,
+            path: []const u8,
+            args: []const ast.CallArg,
+            form: []const u8,
+        ) SemaError!void {
+            for (args) |arg| {
+                const token = arg.name_token orelse continue;
+                try context.diagnostic_context.emitToken(path, token, "{s} do not support named arguments; pass arguments positionally", .{form});
+                return;
+            }
+        }
+
         pub fn lowerCall(
             context: *SemaContext,
             allocator: std.mem.Allocator,
@@ -7819,10 +7869,15 @@ pub fn Owner(comptime host: anytype) type {
             globals: []const GlobalBinding,
             locals: []const LocalBinding,
             out: *sir.Expr,
-            call: ast.Call,
+            input_call: ast.Call,
             expected_type_id: ?semantic_types.TypeId,
         ) SemaError!TypedExpr {
+            var call = input_call;
             if (intrinsics.resolveCall(call.owner, call.callee)) |intrinsic| {
+                if (hasNamedCallArguments(call.args)) {
+                    try rejectNamedCallArguments(context, path, call.args, "built-in calls");
+                    return SemaError.SemanticFailed;
+                }
                 switch (intrinsic) {
                     .builtin_print, .builtin_println => return lowerBuiltinPrintCall(context, allocator, path, program, current_module, globals, locals, out, call),
                     .builtin_assert => return lowerBuiltinAssertCall(context, allocator, path, program, current_module, globals, locals, out, call),
@@ -7832,6 +7887,10 @@ pub fn Owner(comptime host: anytype) type {
             }
             if (call.owner) |owner| {
                 if (findProtocol(context, program, current_module, owner)) |protocol_decl| {
+                    if (hasNamedCallArguments(call.args)) {
+                        try rejectNamedCallArguments(context, path, call.args, "qualified protocol calls");
+                        return SemaError.SemanticFailed;
+                    }
                     if (call.type_args.len != 0) {
                         try context.diagnostic_context.emitToken(path, call.callee_token, "qualified protocol calls do not accept explicit type arguments", .{});
                         return SemaError.SemanticFailed;
@@ -7860,6 +7919,10 @@ pub fn Owner(comptime host: anytype) type {
                         // definition-site trial lowers and discards the arguments and
                         // carries the callee through as a projection of its binder.
                         if (isDefinitionSiteBinder(context, local.type_id)) {
+                            if (hasNamedCallArguments(call.args)) {
+                                try rejectNamedCallArguments(context, path, call.args, "indirect calls");
+                                return SemaError.SemanticFailed;
+                            }
                             for (call.args) |arg| {
                                 const arg_value = try lowerExpr(context, allocator, path, program, current_module, globals, locals, arg.value, null);
                                 arg_value.expr.destroy(allocator);
@@ -7882,9 +7945,40 @@ pub fn Owner(comptime host: anytype) type {
             };
             const callee = resolved_callee.decl;
             try rejectIsolatedCallToFunction(context, allocator, path, program, current_module, globals, call.callee_token, callee);
-            if (callee.params.len != call.args.len) {
-                try context.diagnostic_context.emitToken(path, call.callee_token, "function `{s}` expects {d} args, got {d}", .{ call.callee, callee.params.len, call.args.len });
+            if ((callee.is_extern or callee.is_export or callee.calling_convention != .cyna) and
+                hasNamedCallArguments(call.args))
+            {
+                try rejectNamedCallArguments(context, path, call.args, "C ABI calls");
                 return SemaError.SemanticFailed;
+            }
+            var normalized: ?call_normalization.NormalizedCall = null;
+            defer if (normalized) |result| result.deinit(allocator);
+            var evaluation_order: []const u32 = &.{};
+            if (callNeedsNormalization(callee.params, call.args)) {
+                const result = call_normalization.normalizeCall(allocator, callee.params, call.args) catch |err| {
+                    const message = switch (err) {
+                        error.UnknownName => "call uses an unknown named argument",
+                        error.DuplicateArgument => "call supplies the same parameter more than once",
+                        error.MissingArgument => "call is missing a required argument",
+                        error.PositionalAfterNamed => "positional arguments must precede named arguments",
+                        error.TooManyArguments => "call supplies too many arguments",
+                        error.NonTrailingDefault => "parameters with defaults must form a trailing suffix",
+                        error.UnsupportedDefault => "parameter defaults must be literal values",
+                        error.OutOfMemory => return SemaError.OutOfMemory,
+                    };
+                    try context.diagnostic_context.emitToken(path, call.callee_token, "{s}", .{message});
+                    return SemaError.SemanticFailed;
+                };
+                normalized = result;
+                call.args = result.args;
+                evaluation_order = result.evaluation_order;
+            }
+            var has_custom_evaluation_order = false;
+            for (evaluation_order, 0..) |parameter_index, index| {
+                if (parameter_index != index) {
+                    has_custom_evaluation_order = true;
+                    break;
+                }
             }
             if (callee.type_params.len == 0 and call.type_args.len != 0) {
                 try context.diagnostic_context.emitToken(path, call.callee_token, "function `{s}` does not accept explicit type arguments", .{call.callee});
@@ -7905,13 +7999,26 @@ pub fn Owner(comptime host: anytype) type {
 
             if (callee.type_params.len == 0) {
                 try rejectBorrowedCallStateEscapes(context, path, program, current_module, globals, locals, call.args, callee, null, null);
-                for (call.args, callee.params) |arg, param| {
+                const lowered_slots = try allocator.alloc(?sir.CallArg, call.args.len);
+                defer allocator.free(lowered_slots);
+                @memset(lowered_slots, null);
+                errdefer for (lowered_slots) |slot| if (slot) |arg| arg.deinit(allocator);
+                var evaluation_cursor: usize = 0;
+                while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                    const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                    const arg = call.args[parameter_index];
+                    const param = callee.params[parameter_index];
                     const expected = try parseCanonicalType(context, path, program, callee.module_name, param.type_name);
-                    try appendOwnedLowered(allocator, &args, try lowerCallArg(context, allocator, path, program, current_module, globals, locals, arg, expected, .{
+                    lowered_slots[parameter_index] = try lowerCallArg(context, allocator, path, program, current_module, globals, locals, arg, expected, .{
                         .path = moduleSourcePath(program, callee.module_name, path),
                         .token = param.type_name.token,
                         .message = "parameter type declared here",
-                    }));
+                    });
+                }
+                try args.ensureUnusedCapacity(allocator, lowered_slots.len);
+                for (lowered_slots) |*slot| {
+                    args.appendAssumeCapacity(slot.*.?);
+                    slot.* = null;
                 }
                 if (std.mem.eql(u8, callee.module_name, "std.thread") and
                     callee.owner != null and std.mem.eql(u8, callee.owner.?, "TaskGroup") and
@@ -7933,6 +8040,11 @@ pub fn Owner(comptime host: anytype) type {
                     .owner = call.owner,
                     .callee = call.callee,
                     .args = owned_args,
+                    .evaluation_order = if (has_custom_evaluation_order)
+                        try allocator.dupe(u32, evaluation_order)
+                    else
+                        &.{},
+                    .evaluation_order_owned = has_custom_evaluation_order,
                 } };
                 try attachCheckedCallUse(context, out, return_type, context.function_state.active_source_decl_id, call.callee_token.offset);
                 return try makeTypedExprWithProvenance(
@@ -7957,9 +8069,22 @@ pub fn Owner(comptime host: anytype) type {
                         for (lowered_args.items) |arg| arg.expr.destroy(allocator);
                         lowered_args.deinit(allocator);
                     }
-                    for (call.args, callee.params) |arg, param| {
+                    const lowered_slots = try allocator.alloc(?TypedExpr, call.args.len);
+                    defer allocator.free(lowered_slots);
+                    @memset(lowered_slots, null);
+                    errdefer for (lowered_slots) |slot| if (slot) |value| value.expr.destroy(allocator);
+                    var evaluation_cursor: usize = 0;
+                    while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                        const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                        const arg = call.args[parameter_index];
+                        const param = callee.params[parameter_index];
                         const expected = try parseTypeWithBindings(context, path, program, current_module, param.type_name, null, callee.type_params, resolved_args);
-                        try appendOwnedLowered(allocator, &lowered_args, try lowerExpr(context, allocator, path, program, current_module, globals, locals, arg.value, expected));
+                        lowered_slots[parameter_index] = try lowerExpr(context, allocator, path, program, current_module, globals, locals, arg.value, expected);
+                    }
+                    try lowered_args.ensureUnusedCapacity(allocator, lowered_slots.len);
+                    for (lowered_slots) |*slot| {
+                        lowered_args.appendAssumeCapacity(slot.*.?);
+                        slot.* = null;
                     }
 
                     try rejectBorrowedCallStateEscapes(context, path, program, current_module, globals, locals, call.args, callee, callee.type_params, resolved_args);
@@ -7986,6 +8111,11 @@ pub fn Owner(comptime host: anytype) type {
                         .owner = concrete.owner,
                         .callee = concrete.name,
                         .args = owned_args,
+                        .evaluation_order = if (has_custom_evaluation_order)
+                            try allocator.dupe(u32, evaluation_order)
+                        else
+                            &.{},
+                        .evaluation_order_owned = has_custom_evaluation_order,
                     } };
                     try attachCheckedCallUse(context, out, concrete.return_type_id, context.function_state.active_source_decl_id, call.callee_token.offset);
                     return try makeTypedExprWithProvenance(
@@ -8025,7 +8155,12 @@ pub fn Owner(comptime host: anytype) type {
                 defer allocator.free(staged);
                 @memset(staged, null);
                 errdefer for (staged) |maybe_arg| if (maybe_arg) |arg| arg.expr.destroy(allocator);
-                for (call.args, callee.params, staged) |arg, param, *slot| {
+                var evaluation_cursor: usize = 0;
+                while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                    const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                    const arg = call.args[parameter_index];
+                    const param = callee.params[parameter_index];
+                    const slot = &staged[parameter_index];
                     const needs_context = switch (arg.value.*) {
                         .array_literal => |literal| literal.token.tag != .l_paren,
                         .keyed_literal, .none, .union_case => true,
@@ -8044,7 +8179,12 @@ pub fn Owner(comptime host: anytype) type {
                 else
                     try inferGenericArgsFromCall(context, path, program, current_module, callee, staged, expected_type_id);
                 errdefer context.allocator.free(inferred);
-                for (call.args, callee.params, staged) |arg, param, *slot| {
+                evaluation_cursor = 0;
+                while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                    const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                    const arg = call.args[parameter_index];
+                    const param = callee.params[parameter_index];
+                    const slot = &staged[parameter_index];
                     if (slot.* != null) continue;
                     const expected = try parseTypeWithBindings(context, path, program, callee.module_name, param.type_name, null, callee.type_params, inferred);
                     slot.* = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, arg.value, expected);
@@ -8059,15 +8199,40 @@ pub fn Owner(comptime host: anytype) type {
                 if (call.type_args.len != 0) {
                     const explicit = try resolveExplicitGenericArgs(context, path, program, current_module, callee, call.type_args);
                     errdefer context.allocator.free(explicit);
-                    for (call.args, callee.params) |arg, param| {
+                    const lowered_slots = try allocator.alloc(?TypedExpr, call.args.len);
+                    defer allocator.free(lowered_slots);
+                    @memset(lowered_slots, null);
+                    errdefer for (lowered_slots) |slot| if (slot) |value| value.expr.destroy(allocator);
+                    var evaluation_cursor: usize = 0;
+                    while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                        const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                        const arg = call.args[parameter_index];
+                        const param = callee.params[parameter_index];
                         const expected = try parseTypeWithBindings(context, path, program, callee.module_name, param.type_name, null, callee.type_params, explicit);
-                        const lowered = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, arg.value, expected);
-                        try appendOwnedLowered(allocator, &lowered_args, lowered);
+                        lowered_slots[parameter_index] = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, arg.value, expected);
+                    }
+                    try lowered_args.ensureUnusedCapacity(allocator, lowered_slots.len);
+                    for (lowered_slots) |*slot| {
+                        lowered_args.appendAssumeCapacity(slot.*.?);
+                        slot.* = null;
                     }
                     break :blk explicit;
                 }
-                for (call.args, callee.params) |arg, param| {
-                    try appendOwnedLowered(allocator, &lowered_args, try lowerMethodInferenceArg(context, allocator, path, program, current_module, globals, locals, arg.value, param.type_name));
+                const lowered_slots = try allocator.alloc(?TypedExpr, call.args.len);
+                defer allocator.free(lowered_slots);
+                @memset(lowered_slots, null);
+                errdefer for (lowered_slots) |slot| if (slot) |value| value.expr.destroy(allocator);
+                var evaluation_cursor: usize = 0;
+                while (evaluation_cursor < call.args.len) : (evaluation_cursor += 1) {
+                    const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
+                    const arg = call.args[parameter_index];
+                    const param = callee.params[parameter_index];
+                    lowered_slots[parameter_index] = try lowerMethodInferenceArg(context, allocator, path, program, current_module, globals, locals, arg.value, param.type_name);
+                }
+                try lowered_args.ensureUnusedCapacity(allocator, lowered_slots.len);
+                for (lowered_slots) |*slot| {
+                    lowered_args.appendAssumeCapacity(slot.*.?);
+                    slot.* = null;
                 }
                 break :blk try inferGenericArgsFromCall(context, path, program, current_module, callee, lowered_args.items, expected_type_id);
             };
@@ -8115,6 +8280,11 @@ pub fn Owner(comptime host: anytype) type {
                 .owner = concrete.owner,
                 .callee = concrete.name,
                 .args = owned_args,
+                .evaluation_order = if (has_custom_evaluation_order)
+                    try allocator.dupe(u32, evaluation_order)
+                else
+                    &.{},
+                .evaluation_order_owned = has_custom_evaluation_order,
             } };
             try attachCheckedCallUse(context, out, concrete.return_type_id, context.function_state.active_source_decl_id, call.callee_token.offset);
             var result = try makeTypedExprWithProvenance(
@@ -8139,6 +8309,10 @@ pub fn Owner(comptime host: anytype) type {
             call: ast.Call,
             callee: ast.Function,
         ) SemaError!TypedExpr {
+            if (hasNamedCallArguments(call.args)) {
+                try rejectNamedCallArguments(context, path, call.args, "intrinsic calls");
+                return SemaError.SemanticFailed;
+            }
             const intrinsic_id = intrinsics.resolveExplicit(callee.intrinsic_name.?) orelse return SemaError.SemanticFailed;
             switch (intrinsic_id) {
                 .value_eq => {},
@@ -8192,6 +8366,10 @@ pub fn Owner(comptime host: anytype) type {
             call: ast.Call,
             callee_local: LocalBinding,
         ) SemaError!TypedExpr {
+            if (hasNamedCallArguments(call.args)) {
+                try rejectNamedCallArguments(context, path, call.args, "function pointer calls");
+                return SemaError.SemanticFailed;
+            }
             if (call.type_args.len != 0) {
                 try context.diagnostic_context.emitToken(path, call.callee_token, "function pointer `{s}` does not accept explicit type arguments", .{call.callee});
                 return SemaError.SemanticFailed;
@@ -8737,6 +8915,10 @@ pub fn Owner(comptime host: anytype) type {
             qualified_protocol: ?identity.DeclId,
             prelowered_receiver: ?TypedExpr,
         ) SemaError!TypedExpr {
+            if (hasNamedCallArguments(call.args)) {
+                try rejectNamedCallArguments(context, path, call.args, "method calls");
+                return SemaError.SemanticFailed;
+            }
             if (call.object.* == .name) {
                 const object_name = call.object.name.text;
                 if (findLocal(locals, object_name)) |local| {
@@ -10007,56 +10189,54 @@ pub fn Owner(comptime host: anytype) type {
             context.function_state.expected_type_origin = expectation_origin;
             defer context.function_state.expected_type_origin = saved_expectation_origin;
 
-            if (canonicalTypeKind(context, expected) == .ref) switch (arg) {
-                .value => |expr| {
-                    if (expr.* == .name) {
-                        const name = expr.name;
-                        if (findLocal(locals, name.text)) |local| {
-                            if (local.kind(context) == .ref) {
-                                try expectTypeFrom(context, path, firstExprToken(expr), expected, local.type_id, expectation_origin);
-                                const ref_expr = try allocator.create(sir.Expr);
-                                ref_expr.* = .{ .ref_alias_local = name.text };
-                                errdefer ref_expr.destroy(allocator);
-                                var ref_typed = makeTypedExprFromId(ref_expr, expected);
-                                try finalizeAndRecordExprSemantics(context, path, program, current_module, &ref_typed);
-                                try recordLoweredPlaceIdentity(context, allocator, path, program, current_module, globals, locals, expr, ref_expr);
-                                return .{ .value = ref_expr };
-                            }
+            if (canonicalTypeKind(context, expected) == .ref) {
+                const expr = arg.value;
+                if (expr.* == .name) {
+                    const name = expr.name;
+                    if (findLocal(locals, name.text)) |local| {
+                        if (local.kind(context) == .ref) {
+                            try expectTypeFrom(context, path, firstExprToken(expr), expected, local.type_id, expectation_origin);
+                            const ref_expr = try allocator.create(sir.Expr);
+                            ref_expr.* = .{ .ref_alias_local = name.text };
+                            errdefer ref_expr.destroy(allocator);
+                            var ref_typed = makeTypedExprFromId(ref_expr, expected);
+                            try finalizeAndRecordExprSemantics(context, path, program, current_module, &ref_typed);
+                            try recordLoweredPlaceIdentity(context, allocator, path, program, current_module, globals, locals, expr, ref_expr);
+                            return .{ .value = ref_expr };
                         }
                     }
-                    const lowered = try lowerExpr(context, allocator, path, program, current_module, globals, locals, expr, null);
-                    var owns_expr = true;
-                    errdefer if (owns_expr) lowered.expr.destroy(allocator);
-                    if (lowered.kind(context) == .ref) {
-                        try expectTypeFrom(context, path, firstExprToken(expr), expected, lowered.type_id, expectation_origin);
-                        return .{ .value = lowered.expr };
-                    }
-                    if (lowered.kind(context) == .owned) {
-                        try expectTypeFrom(context, path, firstExprToken(expr), canonicalRefTarget(context, expected), canonicalOwnedTarget(context, lowered.type_id), expectation_origin);
-                        const borrowed = try lowerBorrowedReceiver(context, allocator, path, program, current_module, globals, locals, expr, lowered.expr, lowered.type_id, &owns_expr, false);
-                        errdefer borrowed.destroy(allocator);
-                        var borrowed_typed = makeTypedExprFromId(borrowed, expected);
-                        try finalizeAndRecordExprSemantics(context, path, program, current_module, &borrowed_typed);
-                        try recordLoweredPlaceIdentity(context, allocator, path, program, current_module, globals, locals, expr, borrowed);
-                        return .{ .value = borrowed };
-                    }
-                    lowered.expr.destroy(allocator);
-                    owns_expr = false;
-                },
-            };
-            return switch (arg) {
-                .value => |expr| blk: {
-                    const lowered = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, expr, expected);
-                    errdefer lowered.expr.destroy(allocator);
+                }
+                const lowered = try lowerExpr(context, allocator, path, program, current_module, globals, locals, expr, null);
+                var owns_expr = true;
+                errdefer if (owns_expr) lowered.expr.destroy(allocator);
+                if (lowered.kind(context) == .ref) {
                     try expectTypeFrom(context, path, firstExprToken(expr), expected, lowered.type_id, expectation_origin);
-                    try rejectScopedAllocCallEscape(context, path, program, locals, expr, expected, "function call");
-                    try rejectProjectedResourceTransferForTypedValue(context, path, program, firstExprToken(expr), lowered, expected, "function call");
-                    try rejectBorrowedResourceTransfer(context, path, program, lowered.expr, expected, firstExprToken(expr), "function argument");
-                    try lowerImplicitHandoff(context, path, program, locals, expr, expected, lowered.expr);
-                    try markCheckedNamedHandoff(context, path, program, @constCast(locals), expr, lowered.expr, expected);
-                    break :blk .{ .value = lowered.expr };
-                },
-            };
+                    return .{ .value = lowered.expr };
+                }
+                if (lowered.kind(context) == .owned) {
+                    try expectTypeFrom(context, path, firstExprToken(expr), canonicalRefTarget(context, expected), canonicalOwnedTarget(context, lowered.type_id), expectation_origin);
+                    const borrowed = try lowerBorrowedReceiver(context, allocator, path, program, current_module, globals, locals, expr, lowered.expr, lowered.type_id, &owns_expr, false);
+                    errdefer borrowed.destroy(allocator);
+                    var borrowed_typed = makeTypedExprFromId(borrowed, expected);
+                    try finalizeAndRecordExprSemantics(context, path, program, current_module, &borrowed_typed);
+                    try recordLoweredPlaceIdentity(context, allocator, path, program, current_module, globals, locals, expr, borrowed);
+                    return .{ .value = borrowed };
+                }
+                lowered.expr.destroy(allocator);
+                owns_expr = false;
+            }
+            {
+                const expr = arg.value;
+                const lowered = try lowerExprInContext(context, allocator, path, program, current_module, globals, locals, expr, expected);
+                errdefer lowered.expr.destroy(allocator);
+                try expectTypeFrom(context, path, firstExprToken(expr), expected, lowered.type_id, expectation_origin);
+                try rejectScopedAllocCallEscape(context, path, program, locals, expr, expected, "function call");
+                try rejectProjectedResourceTransferForTypedValue(context, path, program, firstExprToken(expr), lowered, expected, "function call");
+                try rejectBorrowedResourceTransfer(context, path, program, lowered.expr, expected, firstExprToken(expr), "function argument");
+                try lowerImplicitHandoff(context, path, program, locals, expr, expected, lowered.expr);
+                try markCheckedNamedHandoff(context, path, program, @constCast(locals), expr, lowered.expr, expected);
+                return .{ .value = lowered.expr };
+            }
         }
 
         pub fn lowerExprInContext(
@@ -15904,14 +16084,12 @@ pub fn Owner(comptime host: anytype) type {
                 .cast => |value| try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, value.subject, errors),
                 .is_test => |value| try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, value.subject, errors),
                 .@"comptime" => |value| try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, value.expr, errors),
-                .call => |call| for (call.args) |arg| switch (arg) {
-                    .value => |value| try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, value, errors),
-                },
+                .call => |call| for (call.args) |arg|
+                    try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, arg.value, errors),
                 .method_call => |call| {
                     try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, call.object, errors);
-                    for (call.args) |arg| switch (arg) {
-                        .value => |value| try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, value, errors),
-                    };
+                    for (call.args) |arg|
+                        try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, arg.value, errors);
                 },
                 .@"switch" => |branch| {
                     try collectInferredErrorsInExpr(context, path, program, function, params, args, locals, branch.value, errors);

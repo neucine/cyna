@@ -997,12 +997,10 @@ pub fn Walker(comptime host: anytype) type {
                 .call => |call| {
                     const targets = try allocator.alloc(?ast.Function, call.args.len);
                     defer allocator.free(targets);
-                    for (call.args, 0..) |arg, index| switch (arg) {
-                        .value => |value| {
-                            if (try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, value, mode, stack, locals)) |trace| return trace;
-                            targets[index] = locals.value_target;
-                        },
-                    };
+                    for (call.args, 0..) |arg, index| {
+                        if (try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, arg.value, mode, stack, locals)) |trace| return trace;
+                        targets[index] = locals.value_target;
+                    }
                     locals.value_target = null;
                     if (try analyzeThreadBoundaryInCall(context, allocator, program, current_module, globals, call, mode, stack, locals, targets)) |trace| return trace;
                     preserve_target = true;
@@ -1012,9 +1010,8 @@ pub fn Walker(comptime host: anytype) type {
                     if (!(try mutableGlobalReceiverIsSyncResource(context, "", program, current_module, globals, locals.bindings.items, call.object))) {
                         if (try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, call.object, mode, stack, locals)) |trace| return trace;
                     }
-                    for (call.args) |arg| switch (arg) {
-                        .value => |value| if (try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, value, mode, stack, locals)) |trace| return trace,
-                    };
+                    for (call.args) |arg|
+                        if (try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, arg.value, mode, stack, locals)) |trace| return trace;
                 },
                 .function_expr => {},
                 .union_case => |case| if (case.value) |value| return try analyzeThreadBoundaryInExpr(context, allocator, program, current_module, globals, value, mode, stack, locals),

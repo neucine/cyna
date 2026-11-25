@@ -525,6 +525,79 @@ pub fn parse_i32(text: string): i32!ParseStatus {
 Syntax note: earlier sketches also used `fn name(...) -> Return`. This spec
 uses `: Return`.
 
+### 5.1 Parameter Defaults and Named Arguments
+
+Parameters may declare a default value. A parameter with a default must come
+after every parameter without one, so omitted arguments always form a trailing
+suffix:
+
+```cyna
+fn read(path: string, max_bytes: usize = 4096, retry: bool = false): string {
+    ...
+}
+
+read(path);
+read(path, 8192);
+```
+
+Default values in this version are literal values: integers, floats, runes,
+strings, booleans, `none`, or a negated numeric literal. They cannot call
+functions, allocate, read declaration-time names, or depend on the caller's
+locals. This keeps the default visible at the declaration and prevents hidden
+cost.
+
+Calls may name arguments instead of relying on position. Named arguments may
+appear in any order, and a call may mix positional arguments first with named
+arguments after them:
+
+```cyna
+read(retry = true, path = path);
+read(path, retry = true);
+read(path, max_bytes = 8192);
+read(path, 8192, retry = true);
+read(retry = true, max_bytes = 8192, path = path);
+```
+
+Positional arguments fill parameters from the left. A named argument may skip
+a middle parameter that has a default:
+
+```cyna
+read(path, retry = true);       // max_bytes keeps its default
+read(path, 8192, retry = true); // all three parameters supplied
+```
+
+Once a named argument appears, later arguments must also be named. This is an
+error even when the skipped parameter has a default:
+
+```cyna
+read(retry = true, path);       // error: positional argument after a named one
+```
+
+The rules are:
+
+1. A positional argument may not follow a named argument.
+2. Every required parameter is supplied exactly once.
+3. A named argument must match a declared parameter name.
+4. Supplying a parameter both positionally and by name is an error.
+5. An unknown named argument is an error.
+
+Supplied expressions evaluate once, in the order written. Omitted defaults
+evaluate afterward, in parameter order. Type checking and ownership use the
+target parameter, not the argument's position in the call. So
+`read(retry = token, path = path)` evaluates `token` first even though `path`
+occupies the first parameter slot. Owned handoff and borrow checking happen when
+each expression is evaluated, so a local handed off by an earlier expression is
+already unavailable to a later one.
+
+Named arguments and defaults apply to direct Cyna function calls. Method calls,
+function-pointer calls, compiler intrinsics, qualified protocol calls, and C ABI
+(`extern c` or `export c`) declarations stay positional and exact-arity;
+declaring a default on a method or C ABI function is an error. A Cyna wrapper
+can expose a friendlier surface around an ABI function.
+
+Parameter names and defaults are part of a public function's source API. Rename
+or change a default with the same care as changing its type.
+
 ## 6. Primitive Types
 
 Normal Cyna code uses fixed-width and semantic primitive types:

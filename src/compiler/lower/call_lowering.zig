@@ -19,8 +19,15 @@ pub fn lowerCall(self: anytype, call: sir.Call) LowerError!lir.ValueId {
     const params = try @TypeOf(self.*).lowerParams(self, callee.params);
     defer self.mb.allocator.free(params);
     const cleanup_start = self.ownership.cleanup_entries.items.len;
-    for (call.args, params, args) |arg, param, *dst| {
-        dst.* = switch (arg) {
+    const has_evaluation_order = call.evaluation_order.len != 0;
+    if (has_evaluation_order and call.evaluation_order.len != call.args.len) return LowerError.InvalidIdentity;
+    var cursor: usize = 0;
+    while (cursor < call.args.len) : (cursor += 1) {
+        const parameter_index: usize = if (has_evaluation_order) call.evaluation_order[cursor] else cursor;
+        if (parameter_index >= call.args.len) return LowerError.InvalidIdentity;
+        const arg = call.args[parameter_index];
+        const param = params[parameter_index];
+        args[parameter_index] = switch (arg) {
             .value => |expr| blk: {
                 const arg_value = try @TypeOf(self.*).lowerExprForTarget(self, expr, param.ty);
                 if (self.mb.types.items[param.ty] == .@"struct" and

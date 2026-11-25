@@ -1,5 +1,6 @@
 const declarations = @import("declarations/suite.zig");
 const evaluation_order = @import("evaluation_order/suite.zig");
+const functions = @import("functions/suite.zig");
 const exec_core = @import("../exec/core.zig");
 const exec_equality = @import("../exec/equality.zig");
 const exec_examples = @import("../exec/examples.zig");
@@ -29,6 +30,7 @@ const unions_result = @import("unions_result/suite.zig");
 test {
     _ = declarations;
     _ = evaluation_order;
+    _ = functions;
     _ = exec_core;
     _ = exec_equality;
     _ = exec_examples;
