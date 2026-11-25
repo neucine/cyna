@@ -28,6 +28,11 @@ I/O support.
 
 - Added string operations, cryptographic helpers, and byte I/O APIs.
 - Added streaming file I/O and portable hosted-library tests for Windows.
+- `std.fs` now opens files with `OpenMode` flags. `open` accepts the flags,
+  while `open_read` and `open_write` stay as common shorthands.
+- `std.fs.create_dir` is now `mkdir`, `std.fs.read_dir` is now `ls`, and
+  `rmdir` supports recursive removal. There are no compatibility aliases.
+- `std.json.Value` names the JSON null case `null` instead of `null_value`.
 - Standard library guides now live with the bundled `std` package.
 
 See [0.5.3 release notes](RELEASE_0_5_3.md) for the previous release.

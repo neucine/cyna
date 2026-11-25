@@ -9,8 +9,10 @@ the `neucine/sites` workspace syncs and publishes.
 `docs/` pages:
 
 - `docs/spec.md`, `cheatsheet.md`, `guide.md`, `concurrency.md`,
-  `semantics.md`, `runtime.md`, `philosophy.md`,
-  `status.md`, `build.md`, `toolchain.md`, `glossary.md`
+  `semantics.md`, `runtime.md`, `philosophy.md`, `status.md`, `build.md`,
+  `toolchain.md`, `glossary.md`
+- `docs/std-runtime-api.md` and one `std-*.md` page per standard-library
+  module, generated from `docs/std/`
 - `docs/release-<version>.md` for the current release
 - the homepage version label in `docs/index.md`
 

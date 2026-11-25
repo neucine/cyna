@@ -1598,7 +1598,7 @@ pub fn Owner(comptime host: anytype) type {
                         return SemaError.SemanticFailed;
                     }
                     if (!call_normalization.defaultExpressionSupported(param.default_value.?)) {
-                        try context.diagnostic_context.emitToken(path, param.name_token, "parameter defaults must be literal values", .{});
+                        try context.diagnostic_context.emitToken(path, param.name_token, "parameter defaults must be literal values or enum/flags members", .{});
                         return SemaError.SemanticFailed;
                     }
                     saw_default = true;
@@ -7963,7 +7963,7 @@ pub fn Owner(comptime host: anytype) type {
                         error.PositionalAfterNamed => "positional arguments must precede named arguments",
                         error.TooManyArguments => "call supplies too many arguments",
                         error.NonTrailingDefault => "parameters with defaults must form a trailing suffix",
-                        error.UnsupportedDefault => "parameter defaults must be literal values",
+                        error.UnsupportedDefault => "parameter defaults must be literal values or enum/flags members",
                         error.OutOfMemory => return SemaError.OutOfMemory,
                     };
                     try context.diagnostic_context.emitToken(path, call.callee_token, "{s}", .{message});
@@ -8008,8 +8008,12 @@ pub fn Owner(comptime host: anytype) type {
                     const parameter_index = evaluationParameterIndex(evaluation_order, evaluation_cursor);
                     const arg = call.args[parameter_index];
                     const param = callee.params[parameter_index];
+                    const arg_module = if (param.default_value != null and arg.value == param.default_value.?)
+                        callee.module_name
+                    else
+                        current_module;
                     const expected = try parseCanonicalType(context, path, program, callee.module_name, param.type_name);
-                    lowered_slots[parameter_index] = try lowerCallArg(context, allocator, path, program, current_module, globals, locals, arg, expected, .{
+                    lowered_slots[parameter_index] = try lowerCallArg(context, allocator, path, program, arg_module, globals, locals, arg, expected, .{
                         .path = moduleSourcePath(program, callee.module_name, path),
                         .token = param.type_name.token,
                         .message = "parameter type declared here",

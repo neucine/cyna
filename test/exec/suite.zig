@@ -3,6 +3,7 @@ const core = @import("core.zig");
 const crypto = @import("crypto.zig");
 const equality = @import("equality.zig");
 const examples = @import("examples.zig");
+const fs_modes = @import("fs_modes.zig");
 const fs_stream = @import("fs_stream.zig");
 const hal_arch = @import("hal_arch.zig");
 const hosted_io = @import("hosted_io.zig");
@@ -22,6 +23,7 @@ test {
     _ = crypto;
     _ = equality;
     _ = examples;
+    _ = fs_modes;
     _ = fs_stream;
     _ = hal_arch;
     _ = hosted_io;

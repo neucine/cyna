@@ -83,7 +83,7 @@ pub struct Array {
 }
 
 pub union Value {
-    null_value;
+    null;
     bool: bool;
     number: Number;
     string: string;
@@ -522,7 +522,7 @@ struct Parser {
             return value;
         }
         if self.consume_literal("null") {
-            const value: Value = .null_value;
+            const value: Value = .null;
             return value;
         }
         throw Error.invalid_token;
@@ -678,7 +678,7 @@ struct Encoder {
             panic("std.json maximum depth exceeded");
         }
         switch value {
-            .null_value => {
+            .null => {
                 self.append_text("null");
             }
             .bool(flag) => {

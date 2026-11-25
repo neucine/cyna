@@ -142,7 +142,7 @@ pub fn mapArguments(
 /// resolve caller names and cannot fail or allocate are safe in this slice.
 pub fn defaultExpressionSupported(expr: *const ast.Expr) bool {
     return switch (expr.*) {
-        .int, .float, .rune, .string, .bool, .none => true,
+        .int, .float, .rune, .string, .bool, .none, .enum_case => true,
         .unary => |unary| switch (unary.op) {
             .negate => switch (unary.expr.*) {
                 .int, .float => true,
@@ -188,6 +188,13 @@ test "only literal-shaped defaults are accepted" {
 
     try std.testing.expect(defaultExpressionSupported(&literal));
     try std.testing.expect(defaultExpressionSupported(&negative));
+    var enum_case: ast.Expr = .{ .enum_case = .{
+        .type_name = "Mode",
+        .case_name = "read",
+        .token = undefined,
+    } };
+
+    try std.testing.expect(defaultExpressionSupported(&enum_case));
     try std.testing.expect(!defaultExpressionSupported(&name));
 }
 

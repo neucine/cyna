@@ -33,8 +33,8 @@ test "LLVM uses selected target C integer widths in C ABI signatures and cstruct
 test "Windows C callbacks use an adapter for ordinary Cyna functions" {
     const source =
         \\c struct Pair {
-        \\    left: c_longlong;
-        \\    right: c_longlong;
+        \\    left: c_llong;
+        \\    right: c_llong;
         \\}
         \\
         \\type PairCallback = c fn (
@@ -78,7 +78,7 @@ test "Windows C callbacks use an adapter for ordinary Cyna functions" {
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
-        "define void @cyna_fn_",
+        "define { i64, i64 } @cyna_fn_",
     ) != null);
     try std.testing.expect(std.mem.indexOf(
         u8,
