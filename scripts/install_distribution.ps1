@@ -1,6 +1,6 @@
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$')]
-    [string]$Version = $(if ($env:CYNA_RELEASE_VERSION) { $env:CYNA_RELEASE_VERSION } else { '0.5.4' })
+    [string]$Version = $(if ($env:CYNA_RELEASE_VERSION) { $env:CYNA_RELEASE_VERSION } else { '0.5.5' })
 )
 
 $ErrorActionPreference = 'Stop'

@@ -2,7 +2,7 @@
   "name": "cyna",
   "title": "cyna",
   "description": "A C-compatible systems programming language focused on explicit memory, predictable cleanup, and strong value semantics.",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "repo": "https://github.com/neucine/cyna",
   "docs": "docs",
   "nav": [

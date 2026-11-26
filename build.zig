@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
 }
 
 fn buildSupported(b: *std.Build) void {
-    const cyna_version = "0.5.4";
+    const cyna_version = "0.5.5";
     const target = b.standardTargetOptions(.{});
     const optimize = defaultOptimizeOption(b);
     const zig_libs = b.dependency("zig_libs", .{

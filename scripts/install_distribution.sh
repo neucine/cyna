@@ -3,7 +3,7 @@ set -eu
 
 # Update this on each release so the bootstrap script installs the current
 # public distribution by default.
-CYNA_RELEASE_VERSION="${CYNA_RELEASE_VERSION:-0.5.4}"
+CYNA_RELEASE_VERSION="${CYNA_RELEASE_VERSION:-0.5.5}"
 
 usage() {
     cat <<'EOF'
@@ -17,8 +17,8 @@ and updates:
 
 Examples:
   curl -fsSL https://cyna.dev/install.sh | sh
-  curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.4
-  curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.4 aarch64-apple-darwin
+  curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.5
+  curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.5 aarch64-apple-darwin
 
 Environment overrides:
   CYNA_RELEASE_VERSION        default bundled release version

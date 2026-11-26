@@ -3,7 +3,7 @@ layout: home
 title: Cyna systems programming language
 
 hero:
-  text: Cyna 0.5.4
+  text: Cyna 0.5.5
   tagline: Clear value behavior, explicit ownership, and practical low-level control.
   actions:
     - theme: brand
