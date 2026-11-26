@@ -919,7 +919,7 @@ test "same-named distinct aliases in imported modules compare by identity" {
     try std.testing.expectError(error.SemanticFailed, sema.buildSir(std.testing.allocator, source_path, loaded.program));
 }
 
-rhb ttest "local optional type alias keeps its module identity across imports" {
+test "local optional type alias keeps its module identity across imports" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
