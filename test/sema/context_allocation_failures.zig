@@ -784,7 +784,7 @@ test "generic callback return allocation failures retain identity metadata and o
     defer std.testing.allocator.free(tokens);
     const program = try parser.parse(std.testing.allocator, "generic_shape_oom.cy", source, tokens);
     defer program.deinit(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, compileGenericShapeContract, .{program});
+    try checkAllocationFailuresUpTo(std.testing.allocator, compileGenericShapeContract, .{program}, std.math.maxInt(usize));
 }
 
 test "generic contextual callback allocation failures release staged arguments" {
