@@ -10,8 +10,8 @@ Windows C interoperability, and fixes package builds that include C sources.
 - Windows C callback adapters and small aggregate returns follow the Windows
   x64 ABI. The aggregate-return fix has cross-target coverage; native Windows
   runtime validation is still pending.
-- Imports preserve type identity when an imported type has the same name as a
-  local type.
+- Added regression coverage for an imported type with the same name as a
+  local optional alias.
 
 ## Packages and standard library
 
