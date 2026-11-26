@@ -918,3 +918,47 @@ test "same-named distinct aliases in imported modules compare by identity" {
 
     try std.testing.expectError(error.SemanticFailed, sema.buildSir(std.testing.allocator, source_path, loaded.program));
 }
+
+rhb ttest "local optional type alias keeps its module identity across imports" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "cyna.toml", .data =
+        \\name = "optional-alias-import-test"
+        \\src = "."
+        \\entry = "main.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "a.cy", .data =
+        \\import { ResidualPolicy as OwnedPolicy } from .c;
+        \\pub type ResidualPolicy = OwnedPolicy;
+        \\pub struct Holder { pub residual: ?ResidualPolicy; }
+        \\pub fn read(): bool {
+        \\    var residual: ?ResidualPolicy = none;
+        \\    const policy = OwnedPolicy { value: 1 };
+        \\    residual = policy;
+        \\    const holder = Holder { residual: policy };
+        \\    return true;
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "b.cy", .data =
+        \\pub enum ResidualPolicy: i32 { retain = 1, }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "c.cy", .data =
+        \\pub struct ResidualPolicy { pub value: usize; }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "main.cy", .data =
+        \\import { read } from .a;
+        \\import { ResidualPolicy } from .b;
+        \\pub fn main(): void {
+        \\    const policy = ResidualPolicy.retain;
+        \\    assert(read());
+        \\}
+    });
+
+    const source_path = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "main.cy");
+    defer std.testing.allocator.free(source_path);
+    var loaded = try compiler.loader.loadProgram(std.testing.allocator, source_path);
+    defer loaded.deinit(std.testing.allocator);
+    const module = try sema.buildSir(std.testing.allocator, source_path, loaded.program);
+    defer module.deinit(std.testing.allocator);
+}

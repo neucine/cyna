@@ -354,6 +354,11 @@ Current `[c]` keys:
 - `include_paths`
 - `flags`
 
+When a project imports a package, `cyna build` and `cyna run` also compile
+that package's listed C sources. Each package keeps its own include paths and
+flags. Put C sources and headers under the package's `src` directory so they
+are included when the package is installed.
+
 Current `[asm]` keys:
 
 - `sources`

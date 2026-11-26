@@ -74,6 +74,37 @@ test "AArch64 C ABI small cstruct boundary remains direct" {
     try parity.expectLlvmChecks("c_abi_small_cstruct_boundary", source, &checks);
 }
 
+test "Windows x64 C ABI packs an eight-byte cstruct into one register" {
+    const source =
+        \\c struct Status {
+        \\    tag: u8;
+        \\    value: u8;
+        \\    code: i32;
+        \\}
+        \\extern c("read_status") fn read_status(): Status;
+        \\export c("bounce_status") fn bounce_status(value: Status): Status {
+        \\    return value;
+        \\}
+        \\fn main(): i32 {
+        \\    const status = read_status();
+        \\    return status.value as i32;
+        \\}
+    ;
+    const checks = [_]parity.LlvmCheck{.{
+        .target = .{ .name = "windows-x64", .triple = "x86_64-pc-windows-gnu" },
+        .contains = &.{
+            "declare i64 @read_status()",
+            "define i64 @bounce_status(i64 %abi_arg0)",
+            "call i64 @read_status()",
+        },
+        .excludes = &.{
+            "declare { i8, i8, i32 } @read_status()",
+            "define { i8, i8, i32 } @bounce_status",
+        },
+    }};
+    try parity.expectLlvmChecks("windows_small_cstruct_register", source, &checks);
+}
+
 test "comptime C ABI layout metadata follows selected build target" {
     const source =
         \\fn main(): usize {

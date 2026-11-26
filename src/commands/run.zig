@@ -1,5 +1,6 @@
 const std = @import("std");
 const build_pkg = @import("../build.zig");
+const build_command = @import("build.zig");
 const install = @import("install.zig");
 const llvm_backend = @import("../compiler/backend/llvm.zig");
 const internal_error = @import("../compiler/internal_error.zig");
@@ -38,6 +39,7 @@ pub fn runCommand(allocator: std.mem.Allocator, input_path: ?[]const u8, options
         .diagnostic_context = diagnostic_context,
     });
     defer loaded.deinit(allocator);
+    try build_command.attachDependencyCSources(allocator, &target, loaded, &diagnostic_context);
 
     const module = try sema.buildSirWithOptions(allocator, target.source_path, loaded.program, .{
         .target = target.target,

@@ -47,7 +47,8 @@ pub fn buildNativeModules(
     // C and bundled runtime dependencies need header tracking before admission.
     var cacheable = options.cache_emit != null and !artifacts.artifact_deps.any() and
         !target.leak_check and !build_model.isFreestandingTarget(target.target) and
-        target.c_sources.sources.len == 0 and target.asm_sources.sources.len == 0 and
+        target.c_sources.sources.len == 0 and target.dependency_c_sources.len == 0 and
+        target.asm_sources.sources.len == 0 and
         target.link.libs.len == 0 and target.link.search_paths.len == 0;
     var plan = try modules.Plan.init(allocator, loaded);
     defer plan.deinit();

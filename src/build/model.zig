@@ -473,6 +473,7 @@ pub const BuildTarget = struct {
     test_options: ?TestOptions = null,
     link: LinkOptions = .{},
     c_sources: NativeSourceOptions = .{},
+    dependency_c_sources: []NativeSourceOptions = &.{},
     asm_sources: NativeSourceOptions = .{},
     manifest_path: ?[]const u8 = null,
 
@@ -486,6 +487,8 @@ pub const BuildTarget = struct {
         if (self.test_options) |*test_options| test_options.deinit(allocator);
         self.link.deinit(allocator);
         self.c_sources.deinit(allocator);
+        for (self.dependency_c_sources) |*sources| sources.deinit(allocator);
+        if (self.dependency_c_sources.len != 0) allocator.free(self.dependency_c_sources);
         self.asm_sources.deinit(allocator);
         if (self.manifest_path) |value| allocator.free(value);
         self.* = undefined;

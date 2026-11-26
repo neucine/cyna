@@ -234,6 +234,103 @@ test "project manifest can build and run with companion C source" {
     try expectCommandReportedProgramExit(&.{ "zig", "build", "run", "--", "run", root }, 11);
 }
 
+test "path dependency C sources reach the consumer link" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try compat.dirMakePath(tmp.dir, "app/src");
+    try compat.dirMakePath(tmp.dir, "core/src");
+    try compat.dirMakePath(tmp.dir, "core/src/native/include");
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/cyna.toml", .data =
+        \\name = "lg42_native_sources_test"
+        \\version = "0.1.1"
+        \\src = "src"
+        \\entry = "src/lib.cy"
+        \\[c]
+        \\sources = ["src/native/helper.c"]
+        \\include_paths = ["src/native/include"]
+        \\flags = ["-DLG42_VALUE=42"]
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/lib.cy", .data =
+        \\extern c("lg42_answer") fn native_answer(): c_int;
+        \\pub fn answer(): i32 { return native_answer() as i32; }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/native/include/helper.h", .data =
+        \\#define VALUE LG42_VALUE
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/native/helper.c", .data =
+        \\#include "helper.h"
+        \\int lg42_answer(void) { return VALUE; }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/cyna.toml", .data =
+        \\name = "lg42_native_consumer_test"
+        \\entry = "src/main.cy"
+        \\[dependencies]
+        \\lg42_native_sources_test = { path = "../core" }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/src/main.cy", .data =
+        \\import lg42_native_sources_test.lib as core;
+        \\fn main(): i32 { return core.answer(); }
+    });
+
+    const root = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "app");
+    defer std.testing.allocator.free(root);
+    try expectCommandReportedProgramExit(&.{ "zig", "build", "run", "--", "run", root }, 42);
+}
+
+test "partitioned build retains imported optional enum return type" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try compat.dirMakePath(tmp.dir, "app/src");
+    try compat.dirMakePath(tmp.dir, "core/src");
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/cyna.toml", .data =
+        \\name = "lg103_enum_return_test"
+        \\version = "0.1.0"
+        \\src = "src"
+        \\entry = "src/lib.cy"
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/lib.cy", .data =
+        \\import .types;
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "core/src/types.cy", .data =
+        \\pub enum OpTag: i32 { add = 1, sub = 2, }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/cyna.toml", .data =
+        \\name = "lg103_enum_consumer_test"
+        \\entry = "src/main.cy"
+        \\[dependencies]
+        \\lg103_enum_return_test = { path = "../core" }
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/src/reader.cy", .data =
+        \\import { OpTag } from lg103_enum_return_test.types;
+        \\fn decode(value: i64): ?OpTag {
+        \\    return switch value {
+        \\        1 => OpTag.add;
+        \\        2 => OpTag.sub;
+        \\        _ => none;
+        \\    };
+        \\}
+        \\pub fn property(value: ?i64): ?OpTag {
+        \\    if value is selected { return decode(selected); }
+        \\    return none;
+        \\}
+    });
+    try compat.dirWriteFile(tmp.dir, .{ .sub_path = "app/src/main.cy", .data =
+        \\import { property } from .reader;
+        \\import { OpTag } from lg103_enum_return_test.types;
+        \\fn main(): i32 {
+        \\    const selected = property(1);
+        \\    if selected is tag {
+        \\        if tag == OpTag.add { return 42; }
+        \\    }
+        \\    return 1;
+        \\}
+    });
+
+    const root = try compat.tmpDirRealpathAlloc(std.testing.allocator, &tmp, "app");
+    defer std.testing.allocator.free(root);
+    try expectCommandExitedZero(&.{ "zig", "build", "run", "--", "build", root });
+}
+
 test "explicit manifest entry build path keeps companion C symbol imports" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

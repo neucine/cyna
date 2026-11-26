@@ -96,6 +96,7 @@ pub fn buildCommand(allocator: std.mem.Allocator, input_path: ?[]const u8, optio
     });
     load_span.end();
     defer loaded.deinit(allocator);
+    try attachDependencyCSources(allocator, &target, loaded, &diagnostic_context);
     reportProgress(options.verbose, "loaded {d} source modules\n", .{loaded.source_paths.len});
 
     if (emit.ast) {
@@ -298,6 +299,72 @@ pub fn buildCommand(allocator: std.mem.Allocator, input_path: ?[]const u8, optio
         try native_mod.emitPostLinkArtifactsWithDiagnostics(allocator, target, emit, artifact_base_path, native_output_path, &diagnostic_context);
         std.debug.print("wrote native artifact to {s}\n", .{native_output_path});
     }
+}
+
+pub fn attachDependencyCSources(
+    allocator: std.mem.Allocator,
+    target: *build_model.BuildTarget,
+    loaded: loader.LoadedProgram,
+    diagnostic_context: *diagnostics.Context,
+) !void {
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    defer {
+        var keys = seen.keyIterator();
+        while (keys.next()) |key| allocator.free(key.*);
+        seen.deinit(allocator);
+    }
+    var groups: std.ArrayListUnmanaged(build_model.NativeSourceOptions) = .empty;
+    errdefer {
+        for (groups.items) |*group| group.deinit(allocator);
+        groups.deinit(allocator);
+    }
+
+    for (loaded.source_paths, loaded.module_names) |source_path, module_name| {
+        if (std.mem.startsWith(u8, module_name, "std.")) continue;
+        if (std.mem.startsWith(u8, source_path, target.root_dir) and
+            source_path.len > target.root_dir.len and
+            std.fs.path.isSep(source_path[target.root_dir.len])) continue;
+
+        var directory = std.fs.path.dirname(source_path) orelse continue;
+        while (true) {
+            const manifest_path = try std.fs.path.join(allocator, &.{ directory, "cyna.toml" });
+            defer allocator.free(manifest_path);
+            const installed_manifest_path = try std.fs.path.join(allocator, &.{ directory, "manifest.toml" });
+            defer allocator.free(installed_manifest_path);
+            const selected_manifest = if (dependencyManifestExists(manifest_path))
+                manifest_path
+            else if (dependencyManifestExists(installed_manifest_path))
+                installed_manifest_path
+            else
+                null;
+            if (selected_manifest) |package_manifest| {
+                if (!seen.contains(directory)) {
+                    try seen.put(allocator, try allocator.dupe(u8, directory), {});
+                    var dependency = try build_model.resolveBuildTargetForConfigWithDiagnostics(
+                        allocator,
+                        package_manifest,
+                        null,
+                        diagnostic_context,
+                    );
+                    defer dependency.deinit(allocator);
+                    if (dependency.c_sources.sources.len != 0) {
+                        try groups.append(allocator, dependency.c_sources);
+                        dependency.c_sources = .{};
+                    }
+                }
+                break;
+            }
+            const parent = std.fs.path.dirname(directory) orelse break;
+            if (std.mem.eql(u8, parent, directory)) break;
+            directory = parent;
+        }
+    }
+    target.dependency_c_sources = try groups.toOwnedSlice(allocator);
+}
+
+fn dependencyManifestExists(path: []const u8) bool {
+    compat.access(path, .{}) catch return false;
+    return true;
 }
 
 pub fn parseBuildOptions(args: []const []const u8) !BuildOptions {

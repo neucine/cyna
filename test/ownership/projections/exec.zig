@@ -641,6 +641,95 @@ test "nested projected list string index call arg does not consume root" {
     try expectNamedNative("nested_projected_list_string_index_call_arg", source, 42);
 }
 
+test "indexed owned list fields pass to borrowed comparison in nested loops" {
+    const source =
+        \\struct ResourceRequirement { temporary_bytes: usize; alignment: usize; }
+        \\struct ImplementationCost { model_id: u64; target_score: u64; }
+        \\struct Layout { dimensions: List<usize>; }
+        \\struct Candidate {
+        \\    step: usize;
+        \\    source_instruction: usize;
+        \\    version: u32;
+        \\    implementation_id: List<u8>;
+        \\    execution_class: i32;
+        \\    configuration: List<u8>;
+        \\    deterministic: bool;
+        \\    selected: bool;
+        \\    numerical_class: i32;
+        \\    layout_contract: i32;
+        \\    input_requirements: List<Layout>;
+        \\    output_properties: List<Layout>;
+        \\    resources: ResourceRequirement;
+        \\    cost: ImplementationCost;
+        \\}
+        \\fn candidate(configuration: u8): Candidate {
+        \\    var inputs: List<Layout> = list<Layout>();
+        \\    inputs.push(Layout { dimensions: list_from<usize>([:]usize [2, 3]) });
+        \\    var outputs: List<Layout> = list<Layout>();
+        \\    outputs.push(Layout { dimensions: list_from<usize>([:]usize [3, 2]) });
+        \\    return Candidate { step: 1, source_instruction: 7, version: 2,
+        \\        implementation_id: list_from<u8>([:]u8 [1, 2]), execution_class: 1,
+        \\        configuration: list_from<u8>([:]u8 [configuration]),
+        \\        deterministic: true, selected: false, numerical_class: 1,
+        \\        layout_contract: 1, input_requirements: inputs,
+        \\        output_properties: outputs,
+        \\        resources: ResourceRequirement { temporary_bytes: 64, alignment: 8 },
+        \\        cost: ImplementationCost { model_id: 1, target_score: 42 } };
+        \\}
+        \\fn bytes_equal(left: &const List<u8>, right: &const List<u8>): bool {
+        \\    if left.len() != right.len() { return false; }
+        \\    var index: usize = 0;
+        \\    while index < left.len() {
+        \\        if left[index] != right[index] { return false; }
+        \\        index = index + 1;
+        \\    }
+        \\    return true;
+        \\}
+        \\fn has_duplicate(candidates: &const List<Candidate>): bool {
+        \\    var left: usize = 0;
+        \\    var duplicate = false;
+        \\    while left < candidates.len() {
+        \\        var right = left + 1;
+        \\        while right < candidates.len() {
+        \\            if not duplicate and candidates[left].step == candidates[right].step and
+        \\                candidates[left].version == candidates[right].version and
+        \\                bytes_equal(&candidates[left].implementation_id, &candidates[right].implementation_id) and
+        \\                bytes_equal(&candidates[left].configuration, &candidates[right].configuration) {
+        \\                duplicate = true;
+        \\            }
+        \\            right = right + 1;
+        \\        }
+        \\        left = left + 1;
+        \\    }
+        \\    return duplicate;
+        \\}
+        \\fn main(): i32 {
+        \\    var candidates: List<Candidate> = list<Candidate>();
+        \\    candidates.push(candidate(3));
+        \\    candidates.push(candidate(3));
+        \\    const found = has_duplicate(&candidates);
+        \\    drop candidates;
+        \\    var distinct: List<Candidate> = list<Candidate>();
+        \\    distinct.push(candidate(3));
+        \\    distinct.push(candidate(4));
+        \\    const wrong_duplicate = has_duplicate(&distinct);
+        \\    drop distinct;
+        \\    if found and not wrong_duplicate { return 42; }
+        \\    return 1;
+        \\}
+    ;
+
+    try expectNamedNative("indexed_owned_list_borrowed_comparison", source, 42);
+}
+
+test "imported byte comparison in selection validation" {
+    try helpers.expectNativeFileExitCode(
+        std.testing.allocator,
+        "test/ownership/projections/lg96/main.cy",
+        42,
+    );
+}
+
 test "returning switch branch does not poison outer ownership" {
     const source =
         \\enum Status: i32 {

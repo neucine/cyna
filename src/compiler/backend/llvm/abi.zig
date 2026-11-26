@@ -228,8 +228,20 @@ pub fn cLayoutAbiCoercionType(
     module: lir.Module,
     ty: lir.TypeId,
 ) Error!?[]u8 {
-    if (!module.target_abi.is_aarch64_darwin and !module.target_abi.is_x86_64_sysv) return null;
+    if (!module.target_abi.is_aarch64_darwin and !module.target_abi.is_x86_64_sysv and
+        !module.target_abi.is_x86_64_windows) return null;
     if (isNullablePointer(module, ty)) return null;
+    if (module.target_abi.is_x86_64_windows) {
+        if (!isAggregateBoundaryType(module, ty)) return null;
+        const sa = try cLayoutBoundarySizeAlign(module, ty);
+        return switch (sa.size) {
+            1 => try allocator.dupe(u8, "i8"),
+            2 => try allocator.dupe(u8, "i16"),
+            4 => try allocator.dupe(u8, "i32"),
+            8 => try allocator.dupe(u8, "i64"),
+            else => null,
+        };
+    }
     if (cStructHomogeneousFloatFields(module, ty)) |float_bits| {
         const fields = module.types[ty].@"struct".fields;
         if (module.target_abi.is_x86_64_sysv) {
@@ -288,7 +300,13 @@ fn cStructHomogeneousFloatFields(module: lir.Module, ty: lir.TypeId) ?u16 {
 
 fn hasCLayoutScalarCoercion(module: lir.Module, ty: lir.TypeId) Error!bool {
     if (isNullablePointer(module, ty)) return false;
-    if (!module.target_abi.is_aarch64_darwin and !module.target_abi.is_x86_64_sysv) return false;
+    if (!module.target_abi.is_aarch64_darwin and !module.target_abi.is_x86_64_sysv and
+        !module.target_abi.is_x86_64_windows) return false;
+    if (module.target_abi.is_x86_64_windows) {
+        if (!isAggregateBoundaryType(module, ty)) return false;
+        const sa = try cLayoutBoundarySizeAlign(module, ty);
+        return sa.size == 1 or sa.size == 2 or sa.size == 4 or sa.size == 8;
+    }
     if (cStructHomogeneousFloatFields(module, ty) != null) return true;
     if (isAggregateBoundaryType(module, ty)) {
         const sa = try cLayoutBoundarySizeAlign(module, ty);

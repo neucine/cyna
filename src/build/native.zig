@@ -297,6 +297,22 @@ pub fn compileNativeArtifacts(
         reportsActivity(options.verbose, options.progress),
         options.verbose,
     );
+    for (target.dependency_c_sources, 0..) |sources, index| {
+        const kind = try std.fmt.allocPrint(allocator, "c-dep-{d}", .{index});
+        defer allocator.free(kind);
+        try appendNativeObjects(
+            allocator,
+            distribution_tools,
+            tmp_root,
+            &object_paths,
+            target,
+            sources,
+            kind,
+            target.opt,
+            reportsActivity(options.verbose, options.progress),
+            options.verbose,
+        );
+    }
     try appendNativeObjects(
         allocator,
         distribution_tools,
@@ -360,6 +376,11 @@ pub fn compileNativeSourcesToStaticLibraryWithDiagnostics(
     }
 
     try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, target, target.c_sources, "c", target.opt, false, false);
+    for (target.dependency_c_sources, 0..) |sources, index| {
+        const kind = try std.fmt.allocPrint(allocator, "c-dep-{d}", .{index});
+        defer allocator.free(kind);
+        try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, target, sources, kind, target.opt, false, false);
+    }
     try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, target, target.asm_sources, "asm", target.opt, false, false);
     if (object_paths.items.len == 0) return;
 
@@ -1247,6 +1268,11 @@ fn buildNativeExecutableWithRootObject(
         try appendRuntimeLeakCheckObject(allocator, distribution_tools, tmp_root, &object_paths, run_target);
     }
     try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, run_target, run_target.c_sources, "c", run_target.opt, false, false);
+    for (run_target.dependency_c_sources, 0..) |sources, index| {
+        const kind = try std.fmt.allocPrint(allocator, "c-dep-{d}", .{index});
+        defer allocator.free(kind);
+        try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, run_target, sources, kind, run_target.opt, false, false);
+    }
     try appendNativeObjects(allocator, distribution_tools, tmp_root, &object_paths, run_target, run_target.asm_sources, "asm", run_target.opt, false, false);
     try linkNativeArtifact(diagnostic_context, allocator, distribution_tools, exe_path, object_paths.items, run_target, false, effective_artifact_deps, false, false);
 }
